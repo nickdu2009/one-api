@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"gorm.io/gorm"
@@ -19,29 +20,29 @@ type Redemption struct {
 	Count        int    `json:"count" gorm:"-:all"` // only for api request
 }
 
-func GetAllRedemptions(startIdx int, num int) ([]*Redemption, error) {
+func GetAllRedemptions(ctx context.Context, startIdx int, num int) ([]*Redemption, error) {
 	var redemptions []*Redemption
 	var err error
-	err = DB.Order("id desc").Limit(num).Offset(startIdx).Find(&redemptions).Error
+	err = DB.WithContext(ctx).Order("id desc").Limit(num).Offset(startIdx).Find(&redemptions).Error
 	return redemptions, err
 }
 
-func SearchRedemptions(keyword string) (redemptions []*Redemption, err error) {
-	err = DB.Where("id = ? or name LIKE ?", keyword, keyword+"%").Find(&redemptions).Error
+func SearchRedemptions(ctx context.Context, keyword string) (redemptions []*Redemption, err error) {
+	err = DB.WithContext(ctx).Where("id = ? or name LIKE ?", keyword, keyword+"%").Find(&redemptions).Error
 	return redemptions, err
 }
 
-func GetRedemptionById(id int) (*Redemption, error) {
+func GetRedemptionById(ctx context.Context, id int) (*Redemption, error) {
 	if id == 0 {
 		return nil, errors.New("id 为空！")
 	}
 	redemption := Redemption{Id: id}
 	var err error = nil
-	err = DB.First(&redemption, "id = ?", id).Error
+	err = DB.WithContext(ctx).First(&redemption, "id = ?", id).Error
 	return &redemption, err
 }
 
-func Redeem(key string, userId int) (quota int, err error) {
+func Redeem(ctx context.Context, key string, userId int) (quota int, err error) {
 	if key == "" {
 		return 0, errors.New("未提供兑换码")
 	}
@@ -55,7 +56,7 @@ func Redeem(key string, userId int) (quota int, err error) {
 		keyCol = `"key"`
 	}
 
-	err = DB.Transaction(func(tx *gorm.DB) error {
+	err = DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(keyCol+" = ?", key).First(redemption).Error
 		if err != nil {
 			return errors.New("无效的兑换码")
@@ -75,42 +76,42 @@ func Redeem(key string, userId int) (quota int, err error) {
 	if err != nil {
 		return 0, errors.New("兑换失败，" + err.Error())
 	}
-	RecordLog(userId, LogTypeTopup, fmt.Sprintf("通过兑换码充值 %s", common.LogQuota(redemption.Quota)))
+	RecordLog(ctx, userId, LogTypeTopup, fmt.Sprintf("通过兑换码充值 %s", common.LogQuota(redemption.Quota)))
 	return redemption.Quota, nil
 }
 
-func (redemption *Redemption) Insert() error {
+func (redemption *Redemption) Insert(ctx context.Context) error {
 	var err error
-	err = DB.Create(redemption).Error
+	err = DB.WithContext(ctx).Create(redemption).Error
 	return err
 }
 
-func (redemption *Redemption) SelectUpdate() error {
+func (redemption *Redemption) SelectUpdate(ctx context.Context) error {
 	// This can update zero values
-	return DB.Model(redemption).Select("redeemed_time", "status").Updates(redemption).Error
+	return DB.WithContext(ctx).Model(redemption).Select("redeemed_time", "status").Updates(redemption).Error
 }
 
 // Update Make sure your token's fields is completed, because this will update non-zero values
-func (redemption *Redemption) Update() error {
+func (redemption *Redemption) Update(ctx context.Context) error {
 	var err error
-	err = DB.Model(redemption).Select("name", "status", "quota", "redeemed_time").Updates(redemption).Error
+	err = DB.WithContext(ctx).Model(redemption).Select("name", "status", "quota", "redeemed_time").Updates(redemption).Error
 	return err
 }
 
-func (redemption *Redemption) Delete() error {
+func (redemption *Redemption) Delete(ctx context.Context) error {
 	var err error
-	err = DB.Delete(redemption).Error
+	err = DB.WithContext(ctx).Delete(redemption).Error
 	return err
 }
 
-func DeleteRedemptionById(id int) (err error) {
+func DeleteRedemptionById(ctx context.Context, id int) (err error) {
 	if id == 0 {
 		return errors.New("id 为空！")
 	}
 	redemption := Redemption{Id: id}
-	err = DB.Where(redemption).First(&redemption).Error
+	err = DB.WithContext(ctx).Where(redemption).First(&redemption).Error
 	if err != nil {
 		return err
 	}
-	return redemption.Delete()
+	return redemption.Delete(ctx)
 }

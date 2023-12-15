@@ -255,6 +255,7 @@ type CompletionsStreamResponse struct {
 }
 
 func Relay(c *gin.Context) {
+	ctx := c.Request.Context()
 	relayMode := RelayModeUnknown
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/chat/completions") {
 		relayMode = RelayModeChatCompletions
@@ -314,7 +315,7 @@ func Relay(c *gin.Context) {
 		if shouldDisableChannel(&err.OpenAIError, err.StatusCode) {
 			channelId := c.GetInt("channel_id")
 			channelName := c.GetString("channel_name")
-			disableChannel(channelId, channelName, err.Message)
+			disableChannel(ctx, channelId, channelName, err.Message)
 		}
 	}
 }

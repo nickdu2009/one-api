@@ -9,12 +9,13 @@ import (
 )
 
 func GetAllTokens(c *gin.Context) {
+	ctx := c.Request.Context()
 	userId := c.GetInt("id")
 	p, _ := strconv.Atoi(c.Query("p"))
 	if p < 0 {
 		p = 0
 	}
-	tokens, err := model.GetAllUserTokens(userId, p*common.ItemsPerPage, common.ItemsPerPage)
+	tokens, err := model.GetAllUserTokens(ctx, userId, p*common.ItemsPerPage, common.ItemsPerPage)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -31,9 +32,10 @@ func GetAllTokens(c *gin.Context) {
 }
 
 func SearchTokens(c *gin.Context) {
+	ctx := c.Request.Context()
 	userId := c.GetInt("id")
 	keyword := c.Query("keyword")
-	tokens, err := model.SearchUserTokens(userId, keyword)
+	tokens, err := model.SearchUserTokens(ctx, userId, keyword)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -50,6 +52,7 @@ func SearchTokens(c *gin.Context) {
 }
 
 func GetToken(c *gin.Context) {
+	ctx := c.Request.Context()
 	id, err := strconv.Atoi(c.Param("id"))
 	userId := c.GetInt("id")
 	if err != nil {
@@ -59,7 +62,7 @@ func GetToken(c *gin.Context) {
 		})
 		return
 	}
-	token, err := model.GetTokenByIds(id, userId)
+	token, err := model.GetTokenByIds(ctx, id, userId)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -76,9 +79,10 @@ func GetToken(c *gin.Context) {
 }
 
 func GetTokenStatus(c *gin.Context) {
+	ctx := c.Request.Context()
 	tokenId := c.GetInt("token_id")
 	userId := c.GetInt("id")
-	token, err := model.GetTokenByIds(tokenId, userId)
+	token, err := model.GetTokenByIds(ctx, tokenId, userId)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -100,6 +104,7 @@ func GetTokenStatus(c *gin.Context) {
 }
 
 func AddToken(c *gin.Context) {
+	ctx := c.Request.Context()
 	token := model.Token{}
 	err := c.ShouldBindJSON(&token)
 	if err != nil {
@@ -126,7 +131,7 @@ func AddToken(c *gin.Context) {
 		RemainQuota:    token.RemainQuota,
 		UnlimitedQuota: token.UnlimitedQuota,
 	}
-	err = cleanToken.Insert()
+	err = cleanToken.Insert(ctx)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -142,9 +147,10 @@ func AddToken(c *gin.Context) {
 }
 
 func DeleteToken(c *gin.Context) {
+	ctx := c.Request.Context()
 	id, _ := strconv.Atoi(c.Param("id"))
 	userId := c.GetInt("id")
-	err := model.DeleteTokenById(id, userId)
+	err := model.DeleteTokenById(ctx, id, userId)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -160,6 +166,7 @@ func DeleteToken(c *gin.Context) {
 }
 
 func UpdateToken(c *gin.Context) {
+	ctx := c.Request.Context()
 	userId := c.GetInt("id")
 	statusOnly := c.Query("status_only")
 	token := model.Token{}
@@ -178,7 +185,7 @@ func UpdateToken(c *gin.Context) {
 		})
 		return
 	}
-	cleanToken, err := model.GetTokenByIds(token.Id, userId)
+	cleanToken, err := model.GetTokenByIds(ctx, token.Id, userId)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -211,7 +218,7 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.RemainQuota = token.RemainQuota
 		cleanToken.UnlimitedQuota = token.UnlimitedQuota
 	}
-	err = cleanToken.Update()
+	err = cleanToken.Update(ctx)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

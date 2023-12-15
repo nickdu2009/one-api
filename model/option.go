@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"one-api/common"
 	"strconv"
 	"strings"
@@ -12,14 +13,14 @@ type Option struct {
 	Value string `json:"value"`
 }
 
-func AllOption() ([]*Option, error) {
+func AllOption(ctx context.Context) ([]*Option, error) {
 	var options []*Option
 	var err error
-	err = DB.Find(&options).Error
+	err = DB.WithContext(ctx).Find(&options).Error
 	return options, err
 }
 
-func InitOptionMap() {
+func InitOptionMap(ctx context.Context) {
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = make(map[string]string)
 	common.OptionMap["FileUploadPermission"] = strconv.Itoa(common.FileUploadPermission)
@@ -73,11 +74,11 @@ func InitOptionMap() {
 	common.OptionMap["QuotaPerUnit"] = strconv.FormatFloat(common.QuotaPerUnit, 'f', -1, 64)
 	common.OptionMap["RetryTimes"] = strconv.Itoa(common.RetryTimes)
 	common.OptionMapRWMutex.Unlock()
-	loadOptionsFromDatabase()
+	loadOptionsFromDatabase(ctx)
 }
 
-func loadOptionsFromDatabase() {
-	options, _ := AllOption()
+func loadOptionsFromDatabase(ctx context.Context) {
+	options, _ := AllOption(ctx)
 	for _, option := range options {
 		err := updateOptionMap(option.Key, option.Value)
 		if err != nil {
@@ -86,26 +87,26 @@ func loadOptionsFromDatabase() {
 	}
 }
 
-func SyncOptions(frequency int) {
+func SyncOptions(ctx context.Context, frequency int) {
 	for {
 		time.Sleep(time.Duration(frequency) * time.Second)
 		common.SysLog("syncing options from database")
-		loadOptionsFromDatabase()
+		loadOptionsFromDatabase(ctx)
 	}
 }
 
-func UpdateOption(key string, value string) error {
+func UpdateOption(ctx context.Context, key string, value string) error {
 	// Save to database first
 	option := Option{
 		Key: key,
 	}
 	// https://gorm.io/docs/update.html#Save-All-Fields
-	DB.FirstOrCreate(&option, Option{Key: key})
+	DB.WithContext(ctx).FirstOrCreate(&option, Option{Key: key})
 	option.Value = value
 	// Save is a combination function.
 	// If save value does not contain primary key, it will execute Create,
 	// otherwise it will execute Update (with all fields).
-	DB.Save(&option)
+	DB.WithContext(ctx).Save(&option)
 	// Update OptionMap
 	return updateOptionMap(key, value)
 }

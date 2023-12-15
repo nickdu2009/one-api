@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -103,6 +104,7 @@ func buildTestRequest() *ChatRequest {
 }
 
 func TestChannel(c *gin.Context) {
+	ctx := c.Request.Context()
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -111,7 +113,7 @@ func TestChannel(c *gin.Context) {
 		})
 		return
 	}
-	channel, err := model.GetChannelById(id, true)
+	channel, err := model.GetChannelById(ctx, id, true)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -124,7 +126,7 @@ func TestChannel(c *gin.Context) {
 	err, _ = testChannel(channel, *testRequest)
 	tok := time.Now()
 	milliseconds := tok.Sub(tik).Milliseconds()
-	go channel.UpdateResponseTime(milliseconds)
+	go channel.UpdateResponseTime(ctx, milliseconds)
 	consumedTime := float64(milliseconds) / 1000.0
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -145,9 +147,9 @@ func TestChannel(c *gin.Context) {
 var testAllChannelsLock sync.Mutex
 var testAllChannelsRunning bool = false
 
-func notifyRootUser(subject string, content string) {
+func notifyRootUser(ctx context.Context, subject string, content string) {
 	if common.RootUserEmail == "" {
-		common.RootUserEmail = model.GetRootUserEmail()
+		common.RootUserEmail = model.GetRootUserEmail(ctx)
 	}
 	err := common.SendEmail(subject, common.RootUserEmail, content)
 	if err != nil {
@@ -156,24 +158,24 @@ func notifyRootUser(subject string, content string) {
 }
 
 // disable & notify
-func disableChannel(channelId int, channelName string, reason string) {
-	model.UpdateChannelStatusById(channelId, common.ChannelStatusAutoDisabled)
+func disableChannel(ctx context.Context, channelId int, channelName string, reason string) {
+	model.UpdateChannelStatusById(ctx, channelId, common.ChannelStatusAutoDisabled)
 	subject := fmt.Sprintf("通道「%s」（#%d）已被禁用", channelName, channelId)
 	content := fmt.Sprintf("通道「%s」（#%d）已被禁用，原因：%s", channelName, channelId, reason)
-	notifyRootUser(subject, content)
+	notifyRootUser(ctx, subject, content)
 }
 
 // enable & notify
-func enableChannel(channelId int, channelName string) {
-	model.UpdateChannelStatusById(channelId, common.ChannelStatusEnabled)
+func enableChannel(ctx context.Context, channelId int, channelName string) {
+	model.UpdateChannelStatusById(ctx, channelId, common.ChannelStatusEnabled)
 	subject := fmt.Sprintf("通道「%s」（#%d）已被启用", channelName, channelId)
 	content := fmt.Sprintf("通道「%s」（#%d）已被启用", channelName, channelId)
-	notifyRootUser(subject, content)
+	notifyRootUser(ctx, subject, content)
 }
 
-func testAllChannels(notify bool) error {
+func testAllChannels(ctx context.Context, notify bool) error {
 	if common.RootUserEmail == "" {
-		common.RootUserEmail = model.GetRootUserEmail()
+		common.RootUserEmail = model.GetRootUserEmail(ctx)
 	}
 	testAllChannelsLock.Lock()
 	if testAllChannelsRunning {
@@ -182,7 +184,7 @@ func testAllChannels(notify bool) error {
 	}
 	testAllChannelsRunning = true
 	testAllChannelsLock.Unlock()
-	channels, err := model.GetAllChannels(0, 0, true)
+	channels, err := model.GetAllChannels(ctx, 0, 0, true)
 	if err != nil {
 		return err
 	}
@@ -200,15 +202,15 @@ func testAllChannels(notify bool) error {
 			milliseconds := tok.Sub(tik).Milliseconds()
 			if isChannelEnabled && milliseconds > disableThreshold {
 				err = errors.New(fmt.Sprintf("响应时间 %.2fs 超过阈值 %.2fs", float64(milliseconds)/1000.0, float64(disableThreshold)/1000.0))
-				disableChannel(channel.Id, channel.Name, err.Error())
+				disableChannel(ctx, channel.Id, channel.Name, err.Error())
 			}
 			if isChannelEnabled && shouldDisableChannel(openaiErr, -1) {
-				disableChannel(channel.Id, channel.Name, err.Error())
+				disableChannel(ctx, channel.Id, channel.Name, err.Error())
 			}
 			if !isChannelEnabled && shouldEnableChannel(err, openaiErr) {
-				enableChannel(channel.Id, channel.Name)
+				enableChannel(ctx, channel.Id, channel.Name)
 			}
-			channel.UpdateResponseTime(milliseconds)
+			channel.UpdateResponseTime(ctx, milliseconds)
 			time.Sleep(common.RequestInterval)
 		}
 		testAllChannelsLock.Lock()
@@ -225,7 +227,8 @@ func testAllChannels(notify bool) error {
 }
 
 func TestAllChannels(c *gin.Context) {
-	err := testAllChannels(true)
+	ctx := c.Request.Context()
+	err := testAllChannels(ctx, true)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -240,11 +243,11 @@ func TestAllChannels(c *gin.Context) {
 	return
 }
 
-func AutomaticallyTestChannels(frequency int) {
+func AutomaticallyTestChannels(ctx context.Context, frequency int) {
 	for {
 		time.Sleep(time.Duration(frequency) * time.Minute)
 		common.SysLog("testing all channels")
-		_ = testAllChannels(false)
+		_ = testAllChannels(ctx, false)
 		common.SysLog("channel test finished")
 	}
 }

@@ -9,11 +9,12 @@ import (
 )
 
 func GetAllRedemptions(c *gin.Context) {
+	ctx := c.Request.Context()
 	p, _ := strconv.Atoi(c.Query("p"))
 	if p < 0 {
 		p = 0
 	}
-	redemptions, err := model.GetAllRedemptions(p*common.ItemsPerPage, common.ItemsPerPage)
+	redemptions, err := model.GetAllRedemptions(ctx, p*common.ItemsPerPage, common.ItemsPerPage)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -30,8 +31,9 @@ func GetAllRedemptions(c *gin.Context) {
 }
 
 func SearchRedemptions(c *gin.Context) {
+	ctx := c.Request.Context()
 	keyword := c.Query("keyword")
-	redemptions, err := model.SearchRedemptions(keyword)
+	redemptions, err := model.SearchRedemptions(ctx, keyword)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -48,6 +50,7 @@ func SearchRedemptions(c *gin.Context) {
 }
 
 func GetRedemption(c *gin.Context) {
+	ctx := c.Request.Context()
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -56,7 +59,7 @@ func GetRedemption(c *gin.Context) {
 		})
 		return
 	}
-	redemption, err := model.GetRedemptionById(id)
+	redemption, err := model.GetRedemptionById(ctx, id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -73,6 +76,7 @@ func GetRedemption(c *gin.Context) {
 }
 
 func AddRedemption(c *gin.Context) {
+	ctx := c.Request.Context()
 	redemption := model.Redemption{}
 	err := c.ShouldBindJSON(&redemption)
 	if err != nil {
@@ -113,7 +117,7 @@ func AddRedemption(c *gin.Context) {
 			CreatedTime: common.GetTimestamp(),
 			Quota:       redemption.Quota,
 		}
-		err = cleanRedemption.Insert()
+		err = cleanRedemption.Insert(ctx)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -133,8 +137,9 @@ func AddRedemption(c *gin.Context) {
 }
 
 func DeleteRedemption(c *gin.Context) {
+	ctx := c.Request.Context()
 	id, _ := strconv.Atoi(c.Param("id"))
-	err := model.DeleteRedemptionById(id)
+	err := model.DeleteRedemptionById(ctx, id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -150,6 +155,7 @@ func DeleteRedemption(c *gin.Context) {
 }
 
 func UpdateRedemption(c *gin.Context) {
+	ctx := c.Request.Context()
 	statusOnly := c.Query("status_only")
 	redemption := model.Redemption{}
 	err := c.ShouldBindJSON(&redemption)
@@ -160,7 +166,7 @@ func UpdateRedemption(c *gin.Context) {
 		})
 		return
 	}
-	cleanRedemption, err := model.GetRedemptionById(redemption.Id)
+	cleanRedemption, err := model.GetRedemptionById(ctx, redemption.Id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -175,7 +181,7 @@ func UpdateRedemption(c *gin.Context) {
 		cleanRedemption.Name = redemption.Name
 		cleanRedemption.Quota = redemption.Quota
 	}
-	err = cleanRedemption.Update()
+	err = cleanRedemption.Update(ctx)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

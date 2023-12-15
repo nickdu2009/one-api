@@ -78,6 +78,7 @@ func getGitHubUserInfoByCode(code string) (*GitHubUser, error) {
 }
 
 func GitHubOAuth(c *gin.Context) {
+	ctx := c.Request.Context()
 	session := sessions.Default(c)
 	state := c.Query("state")
 	if state == "" || session.Get("oauth_state") == nil || state != session.Get("oauth_state").(string) {
@@ -112,8 +113,8 @@ func GitHubOAuth(c *gin.Context) {
 	user := model.User{
 		GitHubId: githubUser.Login,
 	}
-	if model.IsGitHubIdAlreadyTaken(user.GitHubId) {
-		err := user.FillUserByGitHubId()
+	if model.IsGitHubIdAlreadyTaken(ctx, user.GitHubId) {
+		err := user.FillUserByGitHubId(ctx)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -123,7 +124,7 @@ func GitHubOAuth(c *gin.Context) {
 		}
 	} else {
 		if common.RegisterEnabled {
-			user.Username = "github_" + strconv.Itoa(model.GetMaxUserId()+1)
+			user.Username = "github_" + strconv.Itoa(model.GetMaxUserId(ctx)+1)
 			if githubUser.Name != "" {
 				user.DisplayName = githubUser.Name
 			} else {
@@ -133,7 +134,7 @@ func GitHubOAuth(c *gin.Context) {
 			user.Role = common.RoleCommonUser
 			user.Status = common.UserStatusEnabled
 
-			if err := user.Insert(0); err != nil {
+			if err := user.Insert(ctx, 0); err != nil {
 				c.JSON(http.StatusOK, gin.H{
 					"success": false,
 					"message": err.Error(),
@@ -160,6 +161,7 @@ func GitHubOAuth(c *gin.Context) {
 }
 
 func GitHubBind(c *gin.Context) {
+	ctx := c.Request.Context()
 	if !common.GitHubOAuthEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -179,7 +181,7 @@ func GitHubBind(c *gin.Context) {
 	user := model.User{
 		GitHubId: githubUser.Login,
 	}
-	if model.IsGitHubIdAlreadyTaken(user.GitHubId) {
+	if model.IsGitHubIdAlreadyTaken(ctx, user.GitHubId) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "该 GitHub 账户已被绑定",
@@ -190,7 +192,7 @@ func GitHubBind(c *gin.Context) {
 	id := session.Get("id")
 	// id := c.GetInt("id")  // critical bug!
 	user.Id = id.(int)
-	err = user.FillUserById()
+	err = user.FillUserById(ctx)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -199,7 +201,7 @@ func GitHubBind(c *gin.Context) {
 		return
 	}
 	user.GitHubId = githubUser.Login
-	err = user.Update(false)
+	err = user.Update(ctx, false)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

@@ -30,18 +30,18 @@ const (
 	LogTypeSystem
 )
 
-func RecordLog(userId int, logType int, content string) {
+func RecordLog(ctx context.Context, userId int, logType int, content string) {
 	if logType == LogTypeConsume && !common.LogConsumeEnabled {
 		return
 	}
 	log := &Log{
 		UserId:    userId,
-		Username:  GetUsernameById(userId),
+		Username:  GetUsernameById(ctx, userId),
 		CreatedAt: common.GetTimestamp(),
 		Type:      logType,
 		Content:   content,
 	}
-	err := DB.Create(log).Error
+	err := DB.WithContext(ctx).Create(log).Error
 	if err != nil {
 		common.SysError("failed to record log: " + err.Error())
 	}
@@ -54,7 +54,7 @@ func RecordConsumeLog(ctx context.Context, userId int, channelId int, promptToke
 	}
 	log := &Log{
 		UserId:           userId,
-		Username:         GetUsernameById(userId),
+		Username:         GetUsernameById(ctx, userId),
 		CreatedAt:        common.GetTimestamp(),
 		Type:             LogTypeConsume,
 		Content:          content,
@@ -65,18 +65,18 @@ func RecordConsumeLog(ctx context.Context, userId int, channelId int, promptToke
 		Quota:            quota,
 		ChannelId:        channelId,
 	}
-	err := DB.Create(log).Error
+	err := DB.WithContext(ctx).Create(log).Error
 	if err != nil {
 		common.LogError(ctx, "failed to record log: "+err.Error())
 	}
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int) (logs []*Log, err error) {
+func GetAllLogs(ctx context.Context, logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int) (logs []*Log, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
-		tx = DB
+		tx = DB.WithContext(ctx)
 	} else {
-		tx = DB.Where("type = ?", logType)
+		tx = DB.WithContext(ctx).Where("type = ?", logType)
 	}
 	if modelName != "" {
 		tx = tx.Where("model_name = ?", modelName)
@@ -100,12 +100,12 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	return logs, err
 }
 
-func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int) (logs []*Log, err error) {
+func GetUserLogs(ctx context.Context, userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int) (logs []*Log, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
-		tx = DB.Where("user_id = ?", userId)
+		tx = DB.WithContext(ctx).Where("user_id = ?", userId)
 	} else {
-		tx = DB.Where("user_id = ? and type = ?", userId, logType)
+		tx = DB.WithContext(ctx).Where("user_id = ? and type = ?", userId, logType)
 	}
 	if modelName != "" {
 		tx = tx.Where("model_name = ?", modelName)
@@ -123,18 +123,18 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	return logs, err
 }
 
-func SearchAllLogs(keyword string) (logs []*Log, err error) {
-	err = DB.Where("type = ? or content LIKE ?", keyword, keyword+"%").Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
+func SearchAllLogs(ctx context.Context, keyword string) (logs []*Log, err error) {
+	err = DB.WithContext(ctx).Where("type = ? or content LIKE ?", keyword, keyword+"%").Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
 	return logs, err
 }
 
-func SearchUserLogs(userId int, keyword string) (logs []*Log, err error) {
-	err = DB.Where("user_id = ? and type = ?", userId, keyword).Order("id desc").Limit(common.MaxRecentItems).Omit("id").Find(&logs).Error
+func SearchUserLogs(ctx context.Context, userId int, keyword string) (logs []*Log, err error) {
+	err = DB.WithContext(ctx).Where("user_id = ? and type = ?", userId, keyword).Order("id desc").Limit(common.MaxRecentItems).Omit("id").Find(&logs).Error
 	return logs, err
 }
 
-func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int) (quota int) {
-	tx := DB.Table("logs").Select("ifnull(sum(quota),0)")
+func SumUsedQuota(ctx context.Context, logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int) (quota int) {
+	tx := DB.WithContext(ctx).Table("logs").Select("ifnull(sum(quota),0)")
 	if username != "" {
 		tx = tx.Where("username = ?", username)
 	}
@@ -157,8 +157,8 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	return quota
 }
 
-func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string) (token int) {
-	tx := DB.Table("logs").Select("ifnull(sum(prompt_tokens),0) + ifnull(sum(completion_tokens),0)")
+func SumUsedToken(ctx context.Context, logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string) (token int) {
+	tx := DB.WithContext(ctx).Table("logs").Select("ifnull(sum(prompt_tokens),0) + ifnull(sum(completion_tokens),0)")
 	if username != "" {
 		tx = tx.Where("username = ?", username)
 	}
@@ -178,7 +178,7 @@ func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	return token
 }
 
-func DeleteOldLog(targetTimestamp int64) (int64, error) {
-	result := DB.Where("created_at < ?", targetTimestamp).Delete(&Log{})
+func DeleteOldLog(ctx context.Context, targetTimestamp int64) (int64, error) {
+	result := DB.WithContext(ctx).Where("created_at < ?", targetTimestamp).Delete(&Log{})
 	return result.RowsAffected, result.Error
 }

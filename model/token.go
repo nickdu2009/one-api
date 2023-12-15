@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"gorm.io/gorm"
@@ -21,23 +22,23 @@ type Token struct {
 	UsedQuota      int    `json:"used_quota" gorm:"default:0"` // used quota
 }
 
-func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
+func GetAllUserTokens(ctx context.Context, userId int, startIdx int, num int) ([]*Token, error) {
 	var tokens []*Token
 	var err error
-	err = DB.Where("user_id = ?", userId).Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
+	err = DB.WithContext(ctx).Where("user_id = ?", userId).Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
 	return tokens, err
 }
 
-func SearchUserTokens(userId int, keyword string) (tokens []*Token, err error) {
-	err = DB.Where("user_id = ?", userId).Where("name LIKE ?", keyword+"%").Find(&tokens).Error
+func SearchUserTokens(ctx context.Context, userId int, keyword string) (tokens []*Token, err error) {
+	err = DB.WithContext(ctx).Where("user_id = ?", userId).Where("name LIKE ?", keyword+"%").Find(&tokens).Error
 	return tokens, err
 }
 
-func ValidateUserToken(key string) (token *Token, err error) {
+func ValidateUserToken(ctx context.Context, key string) (token *Token, err error) {
 	if key == "" {
 		return nil, errors.New("未提供令牌")
 	}
-	token, err = CacheGetTokenByKey(key)
+	token, err = CacheGetTokenByKey(ctx, key)
 	if err == nil {
 		if token.Status == common.TokenStatusExhausted {
 			return nil, errors.New("该令牌额度已用尽")
@@ -50,7 +51,7 @@ func ValidateUserToken(key string) (token *Token, err error) {
 		if token.ExpiredTime != -1 && token.ExpiredTime < common.GetTimestamp() {
 			if !common.RedisEnabled {
 				token.Status = common.TokenStatusExpired
-				err := token.SelectUpdate()
+				err := token.SelectUpdate(ctx)
 				if err != nil {
 					common.SysError("failed to update token status" + err.Error())
 				}
@@ -61,7 +62,7 @@ func ValidateUserToken(key string) (token *Token, err error) {
 			if !common.RedisEnabled {
 				// in this case, we can make sure the token is exhausted
 				token.Status = common.TokenStatusExhausted
-				err := token.SelectUpdate()
+				err := token.SelectUpdate(ctx)
 				if err != nil {
 					common.SysError("failed to update token status" + err.Error())
 				}
@@ -73,64 +74,64 @@ func ValidateUserToken(key string) (token *Token, err error) {
 	return nil, errors.New("无效的令牌")
 }
 
-func GetTokenByIds(id int, userId int) (*Token, error) {
+func GetTokenByIds(ctx context.Context, id int, userId int) (*Token, error) {
 	if id == 0 || userId == 0 {
 		return nil, errors.New("id 或 userId 为空！")
 	}
 	token := Token{Id: id, UserId: userId}
 	var err error = nil
-	err = DB.First(&token, "id = ? and user_id = ?", id, userId).Error
+	err = DB.WithContext(ctx).First(&token, "id = ? and user_id = ?", id, userId).Error
 	return &token, err
 }
 
-func GetTokenById(id int) (*Token, error) {
+func GetTokenById(ctx context.Context, id int) (*Token, error) {
 	if id == 0 {
 		return nil, errors.New("id 为空！")
 	}
 	token := Token{Id: id}
 	var err error = nil
-	err = DB.First(&token, "id = ?", id).Error
+	err = DB.WithContext(ctx).First(&token, "id = ?", id).Error
 	return &token, err
 }
 
-func (token *Token) Insert() error {
+func (token *Token) Insert(ctx context.Context) error {
 	var err error
-	err = DB.Create(token).Error
+	err = DB.WithContext(ctx).Create(token).Error
 	return err
 }
 
 // Update Make sure your token's fields is completed, because this will update non-zero values
-func (token *Token) Update() error {
+func (token *Token) Update(ctx context.Context) error {
 	var err error
-	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota").Updates(token).Error
+	err = DB.WithContext(ctx).Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota").Updates(token).Error
 	return err
 }
 
-func (token *Token) SelectUpdate() error {
+func (token *Token) SelectUpdate(ctx context.Context) error {
 	// This can update zero values
-	return DB.Model(token).Select("accessed_time", "status").Updates(token).Error
+	return DB.WithContext(ctx).Model(token).Select("accessed_time", "status").Updates(token).Error
 }
 
-func (token *Token) Delete() error {
+func (token *Token) Delete(ctx context.Context) error {
 	var err error
-	err = DB.Delete(token).Error
+	err = DB.WithContext(ctx).Delete(token).Error
 	return err
 }
 
-func DeleteTokenById(id int, userId int) (err error) {
+func DeleteTokenById(ctx context.Context, id int, userId int) (err error) {
 	// Why we need userId here? In case user want to delete other's token.
 	if id == 0 || userId == 0 {
 		return errors.New("id 或 userId 为空！")
 	}
 	token := Token{Id: id, UserId: userId}
-	err = DB.Where(token).First(&token).Error
+	err = DB.WithContext(ctx).Where(token).First(&token).Error
 	if err != nil {
 		return err
 	}
-	return token.Delete()
+	return token.Delete(ctx)
 }
 
-func IncreaseTokenQuota(id int, quota int) (err error) {
+func IncreaseTokenQuota(ctx context.Context, id int, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
@@ -138,11 +139,11 @@ func IncreaseTokenQuota(id int, quota int) (err error) {
 		addNewRecord(BatchUpdateTypeTokenQuota, id, quota)
 		return nil
 	}
-	return increaseTokenQuota(id, quota)
+	return increaseTokenQuota(ctx, id, quota)
 }
 
-func increaseTokenQuota(id int, quota int) (err error) {
-	err = DB.Model(&Token{}).Where("id = ?", id).Updates(
+func increaseTokenQuota(ctx context.Context, id int, quota int) (err error) {
+	err = DB.WithContext(ctx).Model(&Token{}).Where("id = ?", id).Updates(
 		map[string]interface{}{
 			"remain_quota":  gorm.Expr("remain_quota + ?", quota),
 			"used_quota":    gorm.Expr("used_quota - ?", quota),
@@ -152,7 +153,7 @@ func increaseTokenQuota(id int, quota int) (err error) {
 	return err
 }
 
-func DecreaseTokenQuota(id int, quota int) (err error) {
+func DecreaseTokenQuota(ctx context.Context, id int, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
@@ -160,11 +161,11 @@ func DecreaseTokenQuota(id int, quota int) (err error) {
 		addNewRecord(BatchUpdateTypeTokenQuota, id, -quota)
 		return nil
 	}
-	return decreaseTokenQuota(id, quota)
+	return decreaseTokenQuota(ctx, id, quota)
 }
 
-func decreaseTokenQuota(id int, quota int) (err error) {
-	err = DB.Model(&Token{}).Where("id = ?", id).Updates(
+func decreaseTokenQuota(ctx context.Context, id int, quota int) (err error) {
+	err = DB.WithContext(ctx).Model(&Token{}).Where("id = ?", id).Updates(
 		map[string]interface{}{
 			"remain_quota":  gorm.Expr("remain_quota - ?", quota),
 			"used_quota":    gorm.Expr("used_quota + ?", quota),
@@ -174,18 +175,18 @@ func decreaseTokenQuota(id int, quota int) (err error) {
 	return err
 }
 
-func PreConsumeTokenQuota(tokenId int, quota int) (err error) {
+func PreConsumeTokenQuota(ctx context.Context, tokenId int, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
-	token, err := GetTokenById(tokenId)
+	token, err := GetTokenById(ctx, tokenId)
 	if err != nil {
 		return err
 	}
 	if !token.UnlimitedQuota && token.RemainQuota < quota {
 		return errors.New("令牌额度不足")
 	}
-	userQuota, err := GetUserQuota(token.UserId)
+	userQuota, err := GetUserQuota(ctx, token.UserId)
 	if err != nil {
 		return err
 	}
@@ -196,7 +197,7 @@ func PreConsumeTokenQuota(tokenId int, quota int) (err error) {
 	noMoreQuota := userQuota-quota <= 0
 	if quotaTooLow || noMoreQuota {
 		go func() {
-			email, err := GetUserEmail(token.UserId)
+			email, err := GetUserEmail(ctx, token.UserId)
 			if err != nil {
 				common.SysError("failed to fetch user email: " + err.Error())
 			}
@@ -215,30 +216,30 @@ func PreConsumeTokenQuota(tokenId int, quota int) (err error) {
 		}()
 	}
 	if !token.UnlimitedQuota {
-		err = DecreaseTokenQuota(tokenId, quota)
+		err = DecreaseTokenQuota(ctx, tokenId, quota)
 		if err != nil {
 			return err
 		}
 	}
-	err = DecreaseUserQuota(token.UserId, quota)
+	err = DecreaseUserQuota(ctx, token.UserId, quota)
 	return err
 }
 
-func PostConsumeTokenQuota(tokenId int, quota int) (err error) {
-	token, err := GetTokenById(tokenId)
+func PostConsumeTokenQuota(ctx context.Context, tokenId int, quota int) (err error) {
+	token, err := GetTokenById(ctx, tokenId)
 	if quota > 0 {
-		err = DecreaseUserQuota(token.UserId, quota)
+		err = DecreaseUserQuota(ctx, token.UserId, quota)
 	} else {
-		err = IncreaseUserQuota(token.UserId, -quota)
+		err = IncreaseUserQuota(ctx, token.UserId, -quota)
 	}
 	if err != nil {
 		return err
 	}
 	if !token.UnlimitedQuota {
 		if quota > 0 {
-			err = DecreaseTokenQuota(tokenId, quota)
+			err = DecreaseTokenQuota(ctx, tokenId, quota)
 		} else {
-			err = IncreaseTokenQuota(tokenId, -quota)
+			err = IncreaseTokenQuota(ctx, tokenId, -quota)
 		}
 		if err != nil {
 			return err

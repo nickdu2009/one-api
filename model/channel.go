@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"gorm.io/gorm"
 	"one-api/common"
 )
@@ -26,45 +27,45 @@ type Channel struct {
 	Priority           *int64  `json:"priority" gorm:"bigint;default:0"`
 }
 
-func GetAllChannels(startIdx int, num int, selectAll bool) ([]*Channel, error) {
+func GetAllChannels(ctx context.Context, startIdx int, num int, selectAll bool) ([]*Channel, error) {
 	var channels []*Channel
 	var err error
 	if selectAll {
-		err = DB.Order("id desc").Find(&channels).Error
+		err = DB.WithContext(ctx).Order("id desc").Find(&channels).Error
 	} else {
-		err = DB.Order("id desc").Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
+		err = DB.WithContext(ctx).Order("id desc").Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
 	}
 	return channels, err
 }
 
-func SearchChannels(keyword string) (channels []*Channel, err error) {
+func SearchChannels(ctx context.Context, keyword string) (channels []*Channel, err error) {
 	keyCol := "`key`"
 	if common.UsingPostgreSQL {
 		keyCol = `"key"`
 	}
-	err = DB.Omit("key").Where("id = ? or name LIKE ? or "+keyCol+" = ?", common.String2Int(keyword), keyword+"%", keyword).Find(&channels).Error
+	err = DB.WithContext(ctx).Omit("key").Where("id = ? or name LIKE ? or "+keyCol+" = ?", common.String2Int(keyword), keyword+"%", keyword).Find(&channels).Error
 	return channels, err
 }
 
-func GetChannelById(id int, selectAll bool) (*Channel, error) {
+func GetChannelById(ctx context.Context, id int, selectAll bool) (*Channel, error) {
 	channel := Channel{Id: id}
 	var err error = nil
 	if selectAll {
-		err = DB.First(&channel, "id = ?", id).Error
+		err = DB.WithContext(ctx).First(&channel, "id = ?", id).Error
 	} else {
-		err = DB.Omit("key").First(&channel, "id = ?", id).Error
+		err = DB.WithContext(ctx).Omit("key").First(&channel, "id = ?", id).Error
 	}
 	return &channel, err
 }
 
-func BatchInsertChannels(channels []Channel) error {
+func BatchInsertChannels(ctx context.Context, channels []Channel) error {
 	var err error
-	err = DB.Create(&channels).Error
+	err = DB.WithContext(ctx).Create(&channels).Error
 	if err != nil {
 		return err
 	}
 	for _, channel_ := range channels {
-		err = channel_.AddAbilities()
+		err = channel_.AddAbilities(ctx)
 		if err != nil {
 			return err
 		}
@@ -93,29 +94,29 @@ func (channel *Channel) GetModelMapping() string {
 	return *channel.ModelMapping
 }
 
-func (channel *Channel) Insert() error {
+func (channel *Channel) Insert(ctx context.Context) error {
 	var err error
-	err = DB.Create(channel).Error
+	err = DB.WithContext(ctx).Create(channel).Error
 	if err != nil {
 		return err
 	}
-	err = channel.AddAbilities()
+	err = channel.AddAbilities(ctx)
 	return err
 }
 
-func (channel *Channel) Update() error {
+func (channel *Channel) Update(ctx context.Context) error {
 	var err error
-	err = DB.Model(channel).Updates(channel).Error
+	err = DB.WithContext(ctx).Model(channel).Updates(channel).Error
 	if err != nil {
 		return err
 	}
-	DB.Model(channel).First(channel, "id = ?", channel.Id)
-	err = channel.UpdateAbilities()
+	DB.WithContext(ctx).Model(channel).First(channel, "id = ?", channel.Id)
+	err = channel.UpdateAbilities(ctx)
 	return err
 }
 
-func (channel *Channel) UpdateResponseTime(responseTime int64) {
-	err := DB.Model(channel).Select("response_time", "test_time").Updates(Channel{
+func (channel *Channel) UpdateResponseTime(ctx context.Context, responseTime int64) {
+	err := DB.WithContext(ctx).Model(channel).Select("response_time", "test_time").Updates(Channel{
 		TestTime:     common.GetTimestamp(),
 		ResponseTime: int(responseTime),
 	}).Error
@@ -124,8 +125,8 @@ func (channel *Channel) UpdateResponseTime(responseTime int64) {
 	}
 }
 
-func (channel *Channel) UpdateBalance(balance float64) {
-	err := DB.Model(channel).Select("balance_updated_time", "balance").Updates(Channel{
+func (channel *Channel) UpdateBalance(ctx context.Context, balance float64) {
+	err := DB.WithContext(ctx).Model(channel).Select("balance_updated_time", "balance").Updates(Channel{
 		BalanceUpdatedTime: common.GetTimestamp(),
 		Balance:            balance,
 	}).Error
@@ -134,48 +135,48 @@ func (channel *Channel) UpdateBalance(balance float64) {
 	}
 }
 
-func (channel *Channel) Delete() error {
+func (channel *Channel) Delete(ctx context.Context) error {
 	var err error
-	err = DB.Delete(channel).Error
+	err = DB.WithContext(ctx).Delete(channel).Error
 	if err != nil {
 		return err
 	}
-	err = channel.DeleteAbilities()
+	err = channel.DeleteAbilities(ctx)
 	return err
 }
 
-func UpdateChannelStatusById(id int, status int) {
-	err := UpdateAbilityStatus(id, status == common.ChannelStatusEnabled)
+func UpdateChannelStatusById(ctx context.Context, id int, status int) {
+	err := UpdateAbilityStatus(ctx, id, status == common.ChannelStatusEnabled)
 	if err != nil {
 		common.SysError("failed to update ability status: " + err.Error())
 	}
-	err = DB.Model(&Channel{}).Where("id = ?", id).Update("status", status).Error
+	err = DB.WithContext(ctx).Model(&Channel{}).Where("id = ?", id).Update("status", status).Error
 	if err != nil {
 		common.SysError("failed to update channel status: " + err.Error())
 	}
 }
 
-func UpdateChannelUsedQuota(id int, quota int) {
+func UpdateChannelUsedQuota(ctx context.Context, id int, quota int) {
 	if common.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeChannelUsedQuota, id, quota)
 		return
 	}
-	updateChannelUsedQuota(id, quota)
+	updateChannelUsedQuota(ctx, id, quota)
 }
 
-func updateChannelUsedQuota(id int, quota int) {
-	err := DB.Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error
+func updateChannelUsedQuota(ctx context.Context, id int, quota int) {
+	err := DB.WithContext(ctx).Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error
 	if err != nil {
 		common.SysError("failed to update channel used quota: " + err.Error())
 	}
 }
 
-func DeleteChannelByStatus(status int64) (int64, error) {
-	result := DB.Where("status = ?", status).Delete(&Channel{})
+func DeleteChannelByStatus(ctx context.Context, status int64) (int64, error) {
+	result := DB.WithContext(ctx).Where("status = ?", status).Delete(&Channel{})
 	return result.RowsAffected, result.Error
 }
 
-func DeleteDisabledChannel() (int64, error) {
-	result := DB.Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Delete(&Channel{})
+func DeleteDisabledChannel(ctx context.Context) (int64, error) {
+	result := DB.WithContext(ctx).Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Delete(&Channel{})
 	return result.RowsAffected, result.Error
 }

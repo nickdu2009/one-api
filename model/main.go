@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -13,10 +14,10 @@ import (
 
 var DB *gorm.DB
 
-func createRootAccountIfNeed() error {
+func createRootAccountIfNeed(ctx context.Context) error {
 	var user User
 	//if user.Status != common.UserStatusEnabled {
-	if err := DB.First(&user).Error; err != nil {
+	if err := DB.WithContext(ctx).First(&user).Error; err != nil {
 		common.SysLog("no user exists, create a root user for you: username is root, password is 123456")
 		hashedPassword, err := common.Password2Hash("123456")
 		if err != nil {
@@ -31,7 +32,7 @@ func createRootAccountIfNeed() error {
 			AccessToken: common.GetUUID(),
 			Quota:       100000000,
 		}
-		DB.Create(&rootUser)
+		DB.WithContext(ctx).Create(&rootUser)
 	}
 	return nil
 }
@@ -64,7 +65,7 @@ func chooseDB() (*gorm.DB, error) {
 	})
 }
 
-func InitDB() (err error) {
+func InitDB(ctx context.Context) (err error) {
 	db, err := chooseDB()
 	if err == nil {
 		if common.DebugEnabled {
@@ -112,7 +113,7 @@ func InitDB() (err error) {
 			return err
 		}
 		common.SysLog("database migrated")
-		err = createRootAccountIfNeed()
+		err = createRootAccountIfNeed(ctx)
 		return err
 	} else {
 		common.FatalLog(err)

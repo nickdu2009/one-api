@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,19 +21,19 @@ var (
 	UserId2StatusCacheSeconds = common.SyncFrequency
 )
 
-func CacheGetTokenByKey(key string) (*Token, error) {
+func CacheGetTokenByKey(ctx context.Context, key string) (*Token, error) {
 	keyCol := "`key`"
 	if common.UsingPostgreSQL {
 		keyCol = `"key"`
 	}
 	var token Token
 	if !common.RedisEnabled {
-		err := DB.Where(keyCol+" = ?", key).First(&token).Error
+		err := DB.WithContext(ctx).Where(keyCol+" = ?", key).First(&token).Error
 		return &token, err
 	}
-	tokenObjectString, err := common.RedisGet(fmt.Sprintf("token:%s", key))
+	tokenObjectString, err := common.RedisGet(ctx, fmt.Sprintf("token:%s", key))
 	if err != nil {
-		err := DB.Where(keyCol+" = ?", key).First(&token).Error
+		err := DB.WithContext(ctx).Where(keyCol+" = ?", key).First(&token).Error
 		if err != nil {
 			return nil, err
 		}
@@ -40,7 +41,7 @@ func CacheGetTokenByKey(key string) (*Token, error) {
 		if err != nil {
 			return nil, err
 		}
-		err = common.RedisSet(fmt.Sprintf("token:%s", key), string(jsonBytes), time.Duration(TokenCacheSeconds)*time.Second)
+		err = common.RedisSet(ctx, fmt.Sprintf("token:%s", key), string(jsonBytes), time.Duration(TokenCacheSeconds)*time.Second)
 		if err != nil {
 			common.SysError("Redis set token error: " + err.Error())
 		}
@@ -50,17 +51,17 @@ func CacheGetTokenByKey(key string) (*Token, error) {
 	return &token, err
 }
 
-func CacheGetUserGroup(id int) (group string, err error) {
+func CacheGetUserGroup(ctx context.Context, id int) (group string, err error) {
 	if !common.RedisEnabled {
-		return GetUserGroup(id)
+		return GetUserGroup(ctx, id)
 	}
-	group, err = common.RedisGet(fmt.Sprintf("user_group:%d", id))
+	group, err = common.RedisGet(ctx, fmt.Sprintf("user_group:%d", id))
 	if err != nil {
-		group, err = GetUserGroup(id)
+		group, err = GetUserGroup(ctx, id)
 		if err != nil {
 			return "", err
 		}
-		err = common.RedisSet(fmt.Sprintf("user_group:%d", id), group, time.Duration(UserId2GroupCacheSeconds)*time.Second)
+		err = common.RedisSet(ctx, fmt.Sprintf("user_group:%d", id), group, time.Duration(UserId2GroupCacheSeconds)*time.Second)
 		if err != nil {
 			common.SysError("Redis set user group error: " + err.Error())
 		}
@@ -68,17 +69,17 @@ func CacheGetUserGroup(id int) (group string, err error) {
 	return group, err
 }
 
-func CacheGetUserQuota(id int) (quota int, err error) {
+func CacheGetUserQuota(ctx context.Context, id int) (quota int, err error) {
 	if !common.RedisEnabled {
-		return GetUserQuota(id)
+		return GetUserQuota(ctx, id)
 	}
-	quotaString, err := common.RedisGet(fmt.Sprintf("user_quota:%d", id))
+	quotaString, err := common.RedisGet(ctx, fmt.Sprintf("user_quota:%d", id))
 	if err != nil {
-		quota, err = GetUserQuota(id)
+		quota, err = GetUserQuota(ctx, id)
 		if err != nil {
 			return 0, err
 		}
-		err = common.RedisSet(fmt.Sprintf("user_quota:%d", id), fmt.Sprintf("%d", quota), time.Duration(UserId2QuotaCacheSeconds)*time.Second)
+		err = common.RedisSet(ctx, fmt.Sprintf("user_quota:%d", id), fmt.Sprintf("%d", quota), time.Duration(UserId2QuotaCacheSeconds)*time.Second)
 		if err != nil {
 			common.SysError("Redis set user quota error: " + err.Error())
 		}
@@ -88,36 +89,36 @@ func CacheGetUserQuota(id int) (quota int, err error) {
 	return quota, err
 }
 
-func CacheUpdateUserQuota(id int) error {
+func CacheUpdateUserQuota(ctx context.Context, id int) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	quota, err := GetUserQuota(id)
+	quota, err := GetUserQuota(ctx, id)
 	if err != nil {
 		return err
 	}
-	err = common.RedisSet(fmt.Sprintf("user_quota:%d", id), fmt.Sprintf("%d", quota), time.Duration(UserId2QuotaCacheSeconds)*time.Second)
+	err = common.RedisSet(ctx, fmt.Sprintf("user_quota:%d", id), fmt.Sprintf("%d", quota), time.Duration(UserId2QuotaCacheSeconds)*time.Second)
 	return err
 }
 
-func CacheDecreaseUserQuota(id int, quota int) error {
+func CacheDecreaseUserQuota(ctx context.Context, id int, quota int) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	err := common.RedisDecrease(fmt.Sprintf("user_quota:%d", id), int64(quota))
+	err := common.RedisDecrease(ctx, fmt.Sprintf("user_quota:%d", id), int64(quota))
 	return err
 }
 
-func CacheIsUserEnabled(userId int) (bool, error) {
+func CacheIsUserEnabled(ctx context.Context, userId int) (bool, error) {
 	if !common.RedisEnabled {
-		return IsUserEnabled(userId)
+		return IsUserEnabled(ctx, userId)
 	}
-	enabled, err := common.RedisGet(fmt.Sprintf("user_enabled:%d", userId))
+	enabled, err := common.RedisGet(ctx, fmt.Sprintf("user_enabled:%d", userId))
 	if err == nil {
 		return enabled == "1", nil
 	}
 
-	userEnabled, err := IsUserEnabled(userId)
+	userEnabled, err := IsUserEnabled(ctx, userId)
 	if err != nil {
 		return false, err
 	}
@@ -125,7 +126,7 @@ func CacheIsUserEnabled(userId int) (bool, error) {
 	if userEnabled {
 		enabled = "1"
 	}
-	err = common.RedisSet(fmt.Sprintf("user_enabled:%d", userId), enabled, time.Duration(UserId2StatusCacheSeconds)*time.Second)
+	err = common.RedisSet(ctx, fmt.Sprintf("user_enabled:%d", userId), enabled, time.Duration(UserId2StatusCacheSeconds)*time.Second)
 	if err != nil {
 		common.SysError("Redis set user enabled error: " + err.Error())
 	}
@@ -135,15 +136,15 @@ func CacheIsUserEnabled(userId int) (bool, error) {
 var group2model2channels map[string]map[string][]*Channel
 var channelSyncLock sync.RWMutex
 
-func InitChannelCache() {
+func InitChannelCache(ctx context.Context) {
 	newChannelId2channel := make(map[int]*Channel)
 	var channels []*Channel
-	DB.Where("status = ?", common.ChannelStatusEnabled).Find(&channels)
+	DB.WithContext(ctx).Where("status = ?", common.ChannelStatusEnabled).Find(&channels)
 	for _, channel := range channels {
 		newChannelId2channel[channel.Id] = channel
 	}
 	var abilities []*Ability
-	DB.Find(&abilities)
+	DB.WithContext(ctx).Find(&abilities)
 	groups := make(map[string]bool)
 	for _, ability := range abilities {
 		groups[ability.Group] = true
@@ -181,17 +182,17 @@ func InitChannelCache() {
 	common.SysLog("channels synced from database")
 }
 
-func SyncChannelCache(frequency int) {
+func SyncChannelCache(ctx context.Context, frequency int) {
 	for {
 		time.Sleep(time.Duration(frequency) * time.Second)
 		common.SysLog("syncing channels from database")
-		InitChannelCache()
+		InitChannelCache(ctx)
 	}
 }
 
-func CacheGetRandomSatisfiedChannel(group string, model string) (*Channel, error) {
+func CacheGetRandomSatisfiedChannel(ctx context.Context, group string, model string) (*Channel, error) {
 	if !common.MemoryCacheEnabled {
-		return GetRandomSatisfiedChannel(group, model)
+		return GetRandomSatisfiedChannel(ctx, group, model)
 	}
 	channelSyncLock.RLock()
 	defer channelSyncLock.RUnlock()

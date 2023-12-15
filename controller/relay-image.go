@@ -27,6 +27,7 @@ func isWithinRange(element string, value int) bool {
 }
 
 func relayImageHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
+	ctx := c.Request.Context()
 	imageModel := "dall-e-2"
 	imageSize := "1024x1024"
 
@@ -123,7 +124,7 @@ func relayImageHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode 
 	modelRatio := common.GetModelRatio(imageModel)
 	groupRatio := common.GetGroupRatio(group)
 	ratio := modelRatio * groupRatio
-	userQuota, err := model.CacheGetUserQuota(userId)
+	userQuota, err := model.CacheGetUserQuota(ctx, userId)
 
 	quota := int(ratio*imageCostRatio*1000) * imageRequest.N
 
@@ -162,11 +163,11 @@ func relayImageHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode 
 	var textResponse ImageResponse
 
 	defer func(ctx context.Context) {
-		err := model.PostConsumeTokenQuota(tokenId, quota)
+		err := model.PostConsumeTokenQuota(ctx, tokenId, quota)
 		if err != nil {
 			common.SysError("error consuming token remain quota: " + err.Error())
 		}
-		err = model.CacheUpdateUserQuota(userId)
+		err = model.CacheUpdateUserQuota(ctx, userId)
 		if err != nil {
 			common.SysError("error update user quota cache: " + err.Error())
 		}
@@ -174,9 +175,9 @@ func relayImageHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode 
 			tokenName := c.GetString("token_name")
 			logContent := fmt.Sprintf("模型倍率 %.2f，分组倍率 %.2f", modelRatio, groupRatio)
 			model.RecordConsumeLog(ctx, userId, channelId, 0, 0, imageModel, tokenName, quota, logContent)
-			model.UpdateUserUsedQuotaAndRequestCount(userId, quota)
+			model.UpdateUserUsedQuotaAndRequestCount(ctx, userId, quota)
 			channelId := c.GetInt("channel_id")
-			model.UpdateChannelUsedQuota(channelId, quota)
+			model.UpdateChannelUsedQuota(ctx, channelId, quota)
 		}
 	}(c.Request.Context())
 

@@ -16,6 +16,7 @@ import (
 )
 
 func relayAudioHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
+	ctx := c.Request.Context()
 	audioModel := "whisper-1"
 
 	tokenId := c.GetInt("token_id")
@@ -52,7 +53,7 @@ func relayAudioHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode 
 	default:
 		preConsumedQuota = int(float64(common.PreConsumedQuota) * ratio)
 	}
-	userQuota, err := model.CacheGetUserQuota(userId)
+	userQuota, err := model.CacheGetUserQuota(ctx, userId)
 	if err != nil {
 		return errorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
 	}
@@ -61,7 +62,7 @@ func relayAudioHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode 
 	if userQuota-preConsumedQuota < 0 {
 		return errorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
 	}
-	err = model.CacheDecreaseUserQuota(userId, preConsumedQuota)
+	err = model.CacheDecreaseUserQuota(ctx, userId, preConsumedQuota)
 	if err != nil {
 		return errorWrapper(err, "decrease_user_quota_failed", http.StatusInternalServerError)
 	}
@@ -71,7 +72,7 @@ func relayAudioHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode 
 		preConsumedQuota = 0
 	}
 	if preConsumedQuota > 0 {
-		err := model.PreConsumeTokenQuota(tokenId, preConsumedQuota)
+		err := model.PreConsumeTokenQuota(ctx, tokenId, preConsumedQuota)
 		if err != nil {
 			return errorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
 		}
@@ -186,7 +187,7 @@ func relayAudioHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode 
 			defer func(ctx context.Context) {
 				go func() {
 					// negative means add quota back for token & user
-					err := model.PostConsumeTokenQuota(tokenId, -preConsumedQuota)
+					err := model.PostConsumeTokenQuota(ctx, tokenId, -preConsumedQuota)
 					if err != nil {
 						common.LogError(ctx, fmt.Sprintf("error rollback pre-consumed quota: %s", err.Error()))
 					}

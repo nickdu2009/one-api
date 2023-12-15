@@ -10,6 +10,8 @@ import (
 )
 
 func authHelper(c *gin.Context, minRole int) {
+	ctx := c.Request.Context()
+
 	session := sessions.Default(c)
 	username := session.Get("username")
 	role := session.Get("role")
@@ -26,7 +28,7 @@ func authHelper(c *gin.Context, minRole int) {
 			c.Abort()
 			return
 		}
-		user := model.ValidateAccessToken(accessToken)
+		user := model.ValidateAccessToken(ctx, accessToken)
 		if user != nil && user.Username != "" {
 			// Token is valid
 			username = user.Username
@@ -84,17 +86,19 @@ func RootAuth() func(c *gin.Context) {
 
 func TokenAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
 		key := c.Request.Header.Get("Authorization")
 		key = strings.TrimPrefix(key, "Bearer ")
 		key = strings.TrimPrefix(key, "sk-")
 		parts := strings.Split(key, "-")
 		key = parts[0]
-		token, err := model.ValidateUserToken(key)
+		token, err := model.ValidateUserToken(ctx, key)
 		if err != nil {
 			abortWithMessage(c, http.StatusUnauthorized, err.Error())
 			return
 		}
-		userEnabled, err := model.CacheIsUserEnabled(token.UserId)
+		userEnabled, err := model.CacheIsUserEnabled(ctx, token.UserId)
 		if err != nil {
 			abortWithMessage(c, http.StatusInternalServerError, err.Error())
 			return
@@ -107,7 +111,7 @@ func TokenAuth() func(c *gin.Context) {
 		c.Set("token_id", token.Id)
 		c.Set("token_name", token.Name)
 		if len(parts) > 1 {
-			if model.IsAdmin(token.UserId) {
+			if model.IsAdmin(ctx, token.UserId) {
 				c.Set("channelId", parts[1])
 			} else {
 				abortWithMessage(c, http.StatusForbidden, "普通用户不支持指定渠道")

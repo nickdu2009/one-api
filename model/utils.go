@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"one-api/common"
 	"sync"
 	"time"
@@ -25,11 +26,11 @@ func init() {
 	}
 }
 
-func InitBatchUpdater() {
+func InitBatchUpdater(ctx context.Context) {
 	go func() {
 		for {
 			time.Sleep(time.Duration(common.BatchUpdateInterval) * time.Second)
-			batchUpdate()
+			batchUpdate(ctx)
 		}
 	}()
 }
@@ -44,7 +45,7 @@ func addNewRecord(type_ int, id int, value int) {
 	}
 }
 
-func batchUpdate() {
+func batchUpdate(ctx context.Context) {
 	common.SysLog("batch update started")
 	for i := 0; i < BatchUpdateTypeCount; i++ {
 		batchUpdateLocks[i].Lock()
@@ -55,21 +56,21 @@ func batchUpdate() {
 		for key, value := range store {
 			switch i {
 			case BatchUpdateTypeUserQuota:
-				err := increaseUserQuota(key, value)
+				err := increaseUserQuota(ctx, key, value)
 				if err != nil {
 					common.SysError("failed to batch update user quota: " + err.Error())
 				}
 			case BatchUpdateTypeTokenQuota:
-				err := increaseTokenQuota(key, value)
+				err := increaseTokenQuota(ctx, key, value)
 				if err != nil {
 					common.SysError("failed to batch update token quota: " + err.Error())
 				}
 			case BatchUpdateTypeUsedQuota:
-				updateUserUsedQuota(key, value)
+				updateUserUsedQuota(ctx, key, value)
 			case BatchUpdateTypeRequestCount:
-				updateUserRequestCount(key, value)
+				updateUserRequestCount(ctx, key, value)
 			case BatchUpdateTypeChannelUsedQuota:
-				updateChannelUsedQuota(key, value)
+				updateChannelUsedQuota(ctx, key, value)
 			}
 		}
 	}

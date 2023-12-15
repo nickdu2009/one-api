@@ -50,6 +50,7 @@ func getWeChatIdByCode(code string) (string, error) {
 }
 
 func WeChatAuth(c *gin.Context) {
+	ctx := c.Request.Context()
 	if !common.WeChatAuthEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "管理员未开启通过微信登录以及注册",
@@ -69,8 +70,8 @@ func WeChatAuth(c *gin.Context) {
 	user := model.User{
 		WeChatId: wechatId,
 	}
-	if model.IsWeChatIdAlreadyTaken(wechatId) {
-		err := user.FillUserByWeChatId()
+	if model.IsWeChatIdAlreadyTaken(ctx, wechatId) {
+		err := user.FillUserByWeChatId(ctx)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -80,12 +81,12 @@ func WeChatAuth(c *gin.Context) {
 		}
 	} else {
 		if common.RegisterEnabled {
-			user.Username = "wechat_" + strconv.Itoa(model.GetMaxUserId()+1)
+			user.Username = "wechat_" + strconv.Itoa(model.GetMaxUserId(ctx)+1)
 			user.DisplayName = "WeChat User"
 			user.Role = common.RoleCommonUser
 			user.Status = common.UserStatusEnabled
 
-			if err := user.Insert(0); err != nil {
+			if err := user.Insert(ctx, 0); err != nil {
 				c.JSON(http.StatusOK, gin.H{
 					"success": false,
 					"message": err.Error(),
@@ -112,6 +113,7 @@ func WeChatAuth(c *gin.Context) {
 }
 
 func WeChatBind(c *gin.Context) {
+	ctx := c.Request.Context()
 	if !common.WeChatAuthEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "管理员未开启通过微信登录以及注册",
@@ -128,7 +130,7 @@ func WeChatBind(c *gin.Context) {
 		})
 		return
 	}
-	if model.IsWeChatIdAlreadyTaken(wechatId) {
+	if model.IsWeChatIdAlreadyTaken(ctx, wechatId) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "该微信账号已被绑定",
@@ -139,7 +141,7 @@ func WeChatBind(c *gin.Context) {
 	user := model.User{
 		Id: id,
 	}
-	err = user.FillUserById()
+	err = user.FillUserById(ctx)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -148,7 +150,7 @@ func WeChatBind(c *gin.Context) {
 		return
 	}
 	user.WeChatId = wechatId
-	err = user.Update(false)
+	err = user.Update(ctx, false)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

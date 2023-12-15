@@ -10,11 +10,12 @@ import (
 )
 
 func GetAllChannels(c *gin.Context) {
+	ctx := c.Request.Context()
 	p, _ := strconv.Atoi(c.Query("p"))
 	if p < 0 {
 		p = 0
 	}
-	channels, err := model.GetAllChannels(p*common.ItemsPerPage, common.ItemsPerPage, false)
+	channels, err := model.GetAllChannels(ctx, p*common.ItemsPerPage, common.ItemsPerPage, false)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -31,8 +32,10 @@ func GetAllChannels(c *gin.Context) {
 }
 
 func SearchChannels(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	keyword := c.Query("keyword")
-	channels, err := model.SearchChannels(keyword)
+	channels, err := model.SearchChannels(ctx, keyword)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -49,6 +52,7 @@ func SearchChannels(c *gin.Context) {
 }
 
 func GetChannel(c *gin.Context) {
+	ctx := c.Request.Context()
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -57,7 +61,7 @@ func GetChannel(c *gin.Context) {
 		})
 		return
 	}
-	channel, err := model.GetChannelById(id, false)
+	channel, err := model.GetChannelById(ctx, id, false)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -74,6 +78,7 @@ func GetChannel(c *gin.Context) {
 }
 
 func AddChannel(c *gin.Context) {
+	ctx := c.Request.Context()
 	channel := model.Channel{}
 	err := c.ShouldBindJSON(&channel)
 	if err != nil {
@@ -94,7 +99,7 @@ func AddChannel(c *gin.Context) {
 		localChannel.Key = key
 		channels = append(channels, localChannel)
 	}
-	err = model.BatchInsertChannels(channels)
+	err = model.BatchInsertChannels(ctx, channels)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -110,9 +115,10 @@ func AddChannel(c *gin.Context) {
 }
 
 func DeleteChannel(c *gin.Context) {
+	ctx := c.Request.Context()
 	id, _ := strconv.Atoi(c.Param("id"))
 	channel := model.Channel{Id: id}
-	err := channel.Delete()
+	err := channel.Delete(ctx)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -128,7 +134,8 @@ func DeleteChannel(c *gin.Context) {
 }
 
 func DeleteDisabledChannel(c *gin.Context) {
-	rows, err := model.DeleteDisabledChannel()
+	ctx := c.Request.Context()
+	rows, err := model.DeleteDisabledChannel(ctx)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -145,6 +152,7 @@ func DeleteDisabledChannel(c *gin.Context) {
 }
 
 func UpdateChannel(c *gin.Context) {
+	ctx := c.Request.Context()
 	channel := model.Channel{}
 	err := c.ShouldBindJSON(&channel)
 	if err != nil {
@@ -154,7 +162,7 @@ func UpdateChannel(c *gin.Context) {
 		})
 		return
 	}
-	err = channel.Update()
+	err = channel.Update(ctx)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

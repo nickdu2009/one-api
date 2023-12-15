@@ -32,6 +32,7 @@ func GetOptions(c *gin.Context) {
 }
 
 func UpdateOption(c *gin.Context) {
+	ctx := c.Request.Context()
 	var option model.Option
 	err := json.NewDecoder(c.Request.Body).Decode(&option)
 	if err != nil {
@@ -75,7 +76,7 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	}
-	err = model.UpdateOption(option.Key, option.Value)
+	err = model.UpdateOption(ctx, option.Key, option.Value)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

@@ -17,8 +17,9 @@ type ModelRequest struct {
 
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
+		ctx := c.Request.Context()
 		userId := c.GetInt("id")
-		userGroup, _ := model.CacheGetUserGroup(userId)
+		userGroup, _ := model.CacheGetUserGroup(ctx, userId)
 		c.Set("group", userGroup)
 		var channel *model.Channel
 		channelId, ok := c.Get("channelId")
@@ -28,7 +29,8 @@ func Distribute() func(c *gin.Context) {
 				abortWithMessage(c, http.StatusBadRequest, "无效的渠道 Id")
 				return
 			}
-			channel, err = model.GetChannelById(id, true)
+
+			channel, err = model.GetChannelById(ctx, id, true)
 			if err != nil {
 				abortWithMessage(c, http.StatusBadRequest, "无效的渠道 Id")
 				return
@@ -65,7 +67,7 @@ func Distribute() func(c *gin.Context) {
 					modelRequest.Model = "whisper-1"
 				}
 			}
-			channel, err = model.CacheGetRandomSatisfiedChannel(userGroup, modelRequest.Model)
+			channel, err = model.CacheGetRandomSatisfiedChannel(ctx, userGroup, modelRequest.Model)
 			if err != nil {
 				message := fmt.Sprintf("当前分组 %s 下对于模型 %s 无可用渠道", userGroup, modelRequest.Model)
 				if channel != nil {

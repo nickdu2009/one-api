@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"gorm.io/gorm"
@@ -30,54 +31,54 @@ type User struct {
 	InviterId        int    `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
 }
 
-func GetMaxUserId() int {
+func GetMaxUserId(ctx context.Context) int {
 	var user User
-	DB.Last(&user)
+	DB.WithContext(ctx).Last(&user)
 	return user.Id
 }
 
-func GetAllUsers(startIdx int, num int) (users []*User, err error) {
-	err = DB.Order("id desc").Limit(num).Offset(startIdx).Omit("password").Find(&users).Error
+func GetAllUsers(ctx context.Context, startIdx int, num int) (users []*User, err error) {
+	err = DB.WithContext(ctx).Order("id desc").Limit(num).Offset(startIdx).Omit("password").Find(&users).Error
 	return users, err
 }
 
-func SearchUsers(keyword string) (users []*User, err error) {
-	err = DB.Omit("password").Where("id = ? or username LIKE ? or email LIKE ? or display_name LIKE ?", keyword, keyword+"%", keyword+"%", keyword+"%").Find(&users).Error
+func SearchUsers(ctx context.Context, keyword string) (users []*User, err error) {
+	err = DB.WithContext(ctx).Omit("password").Where("id = ? or username LIKE ? or email LIKE ? or display_name LIKE ?", keyword, keyword+"%", keyword+"%", keyword+"%").Find(&users).Error
 	return users, err
 }
 
-func GetUserById(id int, selectAll bool) (*User, error) {
+func GetUserById(ctx context.Context, id int, selectAll bool) (*User, error) {
 	if id == 0 {
 		return nil, errors.New("id 为空！")
 	}
 	user := User{Id: id}
 	var err error = nil
 	if selectAll {
-		err = DB.First(&user, "id = ?", id).Error
+		err = DB.WithContext(ctx).First(&user, "id = ?", id).Error
 	} else {
-		err = DB.Omit("password").First(&user, "id = ?", id).Error
+		err = DB.WithContext(ctx).Omit("password").First(&user, "id = ?", id).Error
 	}
 	return &user, err
 }
 
-func GetUserIdByAffCode(affCode string) (int, error) {
+func GetUserIdByAffCode(ctx context.Context, affCode string) (int, error) {
 	if affCode == "" {
 		return 0, errors.New("affCode 为空！")
 	}
 	var user User
-	err := DB.Select("id").First(&user, "aff_code = ?", affCode).Error
+	err := DB.WithContext(ctx).Select("id").First(&user, "aff_code = ?", affCode).Error
 	return user.Id, err
 }
 
-func DeleteUserById(id int) (err error) {
+func DeleteUserById(ctx context.Context, id int) (err error) {
 	if id == 0 {
 		return errors.New("id 为空！")
 	}
 	user := User{Id: id}
-	return user.Delete()
+	return user.Delete(ctx)
 }
 
-func (user *User) Insert(inviterId int) error {
+func (user *User) Insert(ctx context.Context, inviterId int) error {
 	var err error
 	if user.Password != "" {
 		user.Password, err = common.Password2Hash(user.Password)
@@ -88,27 +89,27 @@ func (user *User) Insert(inviterId int) error {
 	user.Quota = common.QuotaForNewUser
 	user.AccessToken = common.GetUUID()
 	user.AffCode = common.GetRandomString(4)
-	result := DB.Create(user)
+	result := DB.WithContext(ctx).Create(user)
 	if result.Error != nil {
 		return result.Error
 	}
 	if common.QuotaForNewUser > 0 {
-		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", common.LogQuota(common.QuotaForNewUser)))
+		RecordLog(ctx, user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", common.LogQuota(common.QuotaForNewUser)))
 	}
 	if inviterId != 0 {
 		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee)
-			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", common.LogQuota(common.QuotaForInvitee)))
+			_ = IncreaseUserQuota(ctx, user.Id, common.QuotaForInvitee)
+			RecordLog(ctx, user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", common.LogQuota(common.QuotaForInvitee)))
 		}
 		if common.QuotaForInviter > 0 {
-			_ = IncreaseUserQuota(inviterId, common.QuotaForInviter)
-			RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", common.LogQuota(common.QuotaForInviter)))
+			_ = IncreaseUserQuota(ctx, inviterId, common.QuotaForInviter)
+			RecordLog(ctx, inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", common.LogQuota(common.QuotaForInviter)))
 		}
 	}
 	return nil
 }
 
-func (user *User) Update(updatePassword bool) error {
+func (user *User) Update(ctx context.Context, updatePassword bool) error {
 	var err error
 	if updatePassword {
 		user.Password, err = common.Password2Hash(user.Password)
@@ -116,20 +117,20 @@ func (user *User) Update(updatePassword bool) error {
 			return err
 		}
 	}
-	err = DB.Model(user).Updates(user).Error
+	err = DB.WithContext(ctx).Model(user).Updates(user).Error
 	return err
 }
 
-func (user *User) Delete() error {
+func (user *User) Delete(ctx context.Context) error {
 	if user.Id == 0 {
 		return errors.New("id 为空！")
 	}
-	err := DB.Delete(user).Error
+	err := DB.WithContext(ctx).WithContext(ctx).Delete(user).Error
 	return err
 }
 
 // ValidateAndFill check password & user status
-func (user *User) ValidateAndFill() (err error) {
+func (user *User) ValidateAndFill(ctx context.Context) (err error) {
 	// When querying with struct, GORM will only query with non-zero fields,
 	// that means if your field’s value is 0, '', false or other zero values,
 	// it won’t be used to build query conditions
@@ -137,7 +138,7 @@ func (user *User) ValidateAndFill() (err error) {
 	if user.Username == "" || password == "" {
 		return errors.New("用户名或密码为空")
 	}
-	DB.Where(User{Username: user.Username}).First(user)
+	DB.WithContext(ctx).Where(User{Username: user.Username}).First(user)
 	okay := common.ValidatePasswordAndHash(password, user.Password)
 	if !okay || user.Status != common.UserStatusEnabled {
 		return errors.New("用户名或密码错误，或用户已被封禁")
@@ -145,63 +146,63 @@ func (user *User) ValidateAndFill() (err error) {
 	return nil
 }
 
-func (user *User) FillUserById() error {
+func (user *User) FillUserById(ctx context.Context) error {
 	if user.Id == 0 {
 		return errors.New("id 为空！")
 	}
-	DB.Where(User{Id: user.Id}).First(user)
+	DB.WithContext(ctx).WithContext(ctx).Where(User{Id: user.Id}).First(user)
 	return nil
 }
 
-func (user *User) FillUserByEmail() error {
+func (user *User) FillUserByEmail(ctx context.Context) error {
 	if user.Email == "" {
 		return errors.New("email 为空！")
 	}
-	DB.Where(User{Email: user.Email}).First(user)
+	DB.WithContext(ctx).WithContext(ctx).Where(User{Email: user.Email}).First(user)
 	return nil
 }
 
-func (user *User) FillUserByGitHubId() error {
+func (user *User) FillUserByGitHubId(ctx context.Context) error {
 	if user.GitHubId == "" {
 		return errors.New("GitHub id 为空！")
 	}
-	DB.Where(User{GitHubId: user.GitHubId}).First(user)
+	DB.WithContext(ctx).WithContext(ctx).Where(User{GitHubId: user.GitHubId}).First(user)
 	return nil
 }
 
-func (user *User) FillUserByWeChatId() error {
+func (user *User) FillUserByWeChatId(ctx context.Context) error {
 	if user.WeChatId == "" {
 		return errors.New("WeChat id 为空！")
 	}
-	DB.Where(User{WeChatId: user.WeChatId}).First(user)
+	DB.WithContext(ctx).WithContext(ctx).Where(User{WeChatId: user.WeChatId}).First(user)
 	return nil
 }
 
-func (user *User) FillUserByUsername() error {
+func (user *User) FillUserByUsername(ctx context.Context) error {
 	if user.Username == "" {
 		return errors.New("username 为空！")
 	}
-	DB.Where(User{Username: user.Username}).First(user)
+	DB.WithContext(ctx).WithContext(ctx).Where(User{Username: user.Username}).First(user)
 	return nil
 }
 
-func IsEmailAlreadyTaken(email string) bool {
-	return DB.Where("email = ?", email).Find(&User{}).RowsAffected == 1
+func IsEmailAlreadyTaken(ctx context.Context, email string) bool {
+	return DB.WithContext(ctx).Where("email = ?", email).Find(&User{}).RowsAffected == 1
 }
 
-func IsWeChatIdAlreadyTaken(wechatId string) bool {
-	return DB.Where("wechat_id = ?", wechatId).Find(&User{}).RowsAffected == 1
+func IsWeChatIdAlreadyTaken(ctx context.Context, wechatId string) bool {
+	return DB.WithContext(ctx).Where("wechat_id = ?", wechatId).Find(&User{}).RowsAffected == 1
 }
 
-func IsGitHubIdAlreadyTaken(githubId string) bool {
-	return DB.Where("github_id = ?", githubId).Find(&User{}).RowsAffected == 1
+func IsGitHubIdAlreadyTaken(ctx context.Context, githubId string) bool {
+	return DB.WithContext(ctx).Where("github_id = ?", githubId).Find(&User{}).RowsAffected == 1
 }
 
-func IsUsernameAlreadyTaken(username string) bool {
-	return DB.Where("username = ?", username).Find(&User{}).RowsAffected == 1
+func IsUsernameAlreadyTaken(ctx context.Context, username string) bool {
+	return DB.WithContext(ctx).Where("username = ?", username).Find(&User{}).RowsAffected == 1
 }
 
-func ResetUserPasswordByEmail(email string, password string) error {
+func ResetUserPasswordByEmail(ctx context.Context, email string, password string) error {
 	if email == "" || password == "" {
 		return errors.New("邮箱地址或密码为空！")
 	}
@@ -209,16 +210,16 @@ func ResetUserPasswordByEmail(email string, password string) error {
 	if err != nil {
 		return err
 	}
-	err = DB.Model(&User{}).Where("email = ?", email).Update("password", hashedPassword).Error
+	err = DB.WithContext(ctx).Model(&User{}).Where("email = ?", email).Update("password", hashedPassword).Error
 	return err
 }
 
-func IsAdmin(userId int) bool {
+func IsAdmin(ctx context.Context, userId int) bool {
 	if userId == 0 {
 		return false
 	}
 	var user User
-	err := DB.Where("id = ?", userId).Select("role").Find(&user).Error
+	err := DB.WithContext(ctx).Where("id = ?", userId).Select("role").Find(&user).Error
 	if err != nil {
 		common.SysError("no such user " + err.Error())
 		return false
@@ -226,56 +227,56 @@ func IsAdmin(userId int) bool {
 	return user.Role >= common.RoleAdminUser
 }
 
-func IsUserEnabled(userId int) (bool, error) {
+func IsUserEnabled(ctx context.Context, userId int) (bool, error) {
 	if userId == 0 {
 		return false, errors.New("user id is empty")
 	}
 	var user User
-	err := DB.Where("id = ?", userId).Select("status").Find(&user).Error
+	err := DB.WithContext(ctx).Where("id = ?", userId).Select("status").Find(&user).Error
 	if err != nil {
 		return false, err
 	}
 	return user.Status == common.UserStatusEnabled, nil
 }
 
-func ValidateAccessToken(token string) (user *User) {
+func ValidateAccessToken(ctx context.Context, token string) (user *User) {
 	if token == "" {
 		return nil
 	}
 	token = strings.Replace(token, "Bearer ", "", 1)
 	user = &User{}
-	if DB.Where("access_token = ?", token).First(user).RowsAffected == 1 {
+	if DB.WithContext(ctx).Where("access_token = ?", token).First(user).RowsAffected == 1 {
 		return user
 	}
 	return nil
 }
 
-func GetUserQuota(id int) (quota int, err error) {
-	err = DB.Model(&User{}).Where("id = ?", id).Select("quota").Find(&quota).Error
+func GetUserQuota(ctx context.Context, id int) (quota int, err error) {
+	err = DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Select("quota").Find(&quota).Error
 	return quota, err
 }
 
-func GetUserUsedQuota(id int) (quota int, err error) {
-	err = DB.Model(&User{}).Where("id = ?", id).Select("used_quota").Find(&quota).Error
+func GetUserUsedQuota(ctx context.Context, id int) (quota int, err error) {
+	err = DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Select("used_quota").Find(&quota).Error
 	return quota, err
 }
 
-func GetUserEmail(id int) (email string, err error) {
-	err = DB.Model(&User{}).Where("id = ?", id).Select("email").Find(&email).Error
+func GetUserEmail(ctx context.Context, id int) (email string, err error) {
+	err = DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Select("email").Find(&email).Error
 	return email, err
 }
 
-func GetUserGroup(id int) (group string, err error) {
+func GetUserGroup(ctx context.Context, id int) (group string, err error) {
 	groupCol := "`group`"
 	if common.UsingPostgreSQL {
 		groupCol = `"group"`
 	}
 
-	err = DB.Model(&User{}).Where("id = ?", id).Select(groupCol).Find(&group).Error
+	err = DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Select(groupCol).Find(&group).Error
 	return group, err
 }
 
-func IncreaseUserQuota(id int, quota int) (err error) {
+func IncreaseUserQuota(ctx context.Context, id int, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
@@ -283,15 +284,15 @@ func IncreaseUserQuota(id int, quota int) (err error) {
 		addNewRecord(BatchUpdateTypeUserQuota, id, quota)
 		return nil
 	}
-	return increaseUserQuota(id, quota)
+	return increaseUserQuota(ctx, id, quota)
 }
 
-func increaseUserQuota(id int, quota int) (err error) {
-	err = DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", quota)).Error
+func increaseUserQuota(ctx context.Context, id int, quota int) (err error) {
+	err = DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", quota)).Error
 	return err
 }
 
-func DecreaseUserQuota(id int, quota int) (err error) {
+func DecreaseUserQuota(ctx context.Context, id int, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")
 	}
@@ -299,30 +300,30 @@ func DecreaseUserQuota(id int, quota int) (err error) {
 		addNewRecord(BatchUpdateTypeUserQuota, id, -quota)
 		return nil
 	}
-	return decreaseUserQuota(id, quota)
+	return decreaseUserQuota(ctx, id, quota)
 }
 
-func decreaseUserQuota(id int, quota int) (err error) {
-	err = DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota - ?", quota)).Error
+func decreaseUserQuota(ctx context.Context, id int, quota int) (err error) {
+	err = DB.WithContext(ctx).WithContext(ctx).Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota - ?", quota)).Error
 	return err
 }
 
-func GetRootUserEmail() (email string) {
-	DB.Model(&User{}).Where("role = ?", common.RoleRootUser).Select("email").Find(&email)
+func GetRootUserEmail(ctx context.Context) (email string) {
+	DB.WithContext(ctx).Model(&User{}).Where("role = ?", common.RoleRootUser).Select("email").Find(&email)
 	return email
 }
 
-func UpdateUserUsedQuotaAndRequestCount(id int, quota int) {
+func UpdateUserUsedQuotaAndRequestCount(ctx context.Context, id int, quota int) {
 	if common.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeUsedQuota, id, quota)
 		addNewRecord(BatchUpdateTypeRequestCount, id, 1)
 		return
 	}
-	updateUserUsedQuotaAndRequestCount(id, quota, 1)
+	updateUserUsedQuotaAndRequestCount(ctx, id, quota, 1)
 }
 
-func updateUserUsedQuotaAndRequestCount(id int, quota int, count int) {
-	err := DB.Model(&User{}).Where("id = ?", id).Updates(
+func updateUserUsedQuotaAndRequestCount(ctx context.Context, id int, quota int, count int) {
+	err := DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Updates(
 		map[string]interface{}{
 			"used_quota":    gorm.Expr("used_quota + ?", quota),
 			"request_count": gorm.Expr("request_count + ?", count),
@@ -333,8 +334,8 @@ func updateUserUsedQuotaAndRequestCount(id int, quota int, count int) {
 	}
 }
 
-func updateUserUsedQuota(id int, quota int) {
-	err := DB.Model(&User{}).Where("id = ?", id).Updates(
+func updateUserUsedQuota(ctx context.Context, id int, quota int) {
+	err := DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Updates(
 		map[string]interface{}{
 			"used_quota": gorm.Expr("used_quota + ?", quota),
 		},
@@ -344,14 +345,14 @@ func updateUserUsedQuota(id int, quota int) {
 	}
 }
 
-func updateUserRequestCount(id int, count int) {
-	err := DB.Model(&User{}).Where("id = ?", id).Update("request_count", gorm.Expr("request_count + ?", count)).Error
+func updateUserRequestCount(ctx context.Context, id int, count int) {
+	err := DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Update("request_count", gorm.Expr("request_count + ?", count)).Error
 	if err != nil {
 		common.SysError("failed to update user request count: " + err.Error())
 	}
 }
 
-func GetUsernameById(id int) (username string) {
-	DB.Model(&User{}).Where("id = ?", id).Select("username").Find(&username)
+func GetUsernameById(ctx context.Context, id int) (username string) {
+	DB.WithContext(ctx).Model(&User{}).Where("id = ?", id).Select("username").Find(&username)
 	return username
 }

@@ -11,7 +11,7 @@ var RDB *redis.Client
 var RedisEnabled = true
 
 // InitRedisClient This function is called after init()
-func InitRedisClient() (err error) {
+func InitRedisClient(ctx context.Context) (err error) {
 	if os.Getenv("REDIS_CONN_STRING") == "" {
 		RedisEnabled = false
 		SysLog("REDIS_CONN_STRING not set, Redis is not enabled")
@@ -29,7 +29,7 @@ func InitRedisClient() (err error) {
 	}
 	RDB = redis.NewClient(opt)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	_, err = RDB.Ping(ctx).Result()
@@ -47,22 +47,18 @@ func ParseRedisOption() *redis.Options {
 	return opt
 }
 
-func RedisSet(key string, value string, expiration time.Duration) error {
-	ctx := context.Background()
+func RedisSet(ctx context.Context, key string, value string, expiration time.Duration) error {
 	return RDB.Set(ctx, key, value, expiration).Err()
 }
 
-func RedisGet(key string) (string, error) {
-	ctx := context.Background()
+func RedisGet(ctx context.Context, key string) (string, error) {
 	return RDB.Get(ctx, key).Result()
 }
 
-func RedisDel(key string) error {
-	ctx := context.Background()
+func RedisDel(ctx context.Context, key string) error {
 	return RDB.Del(ctx, key).Err()
 }
 
-func RedisDecrease(key string, value int64) error {
-	ctx := context.Background()
+func RedisDecrease(ctx context.Context, key string, value int64) error {
 	return RDB.DecrBy(ctx, key, value).Err()
 }

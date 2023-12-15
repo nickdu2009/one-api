@@ -18,6 +18,7 @@ type LoginRequest struct {
 }
 
 func Login(c *gin.Context) {
+	ctx := c.Request.Context()
 	if !common.PasswordLoginEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "管理员关闭了密码登录",
@@ -47,7 +48,7 @@ func Login(c *gin.Context) {
 		Username: username,
 		Password: password,
 	}
-	err = user.ValidateAndFill()
+	err = user.ValidateAndFill(ctx)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"message": err.Error(),
@@ -105,6 +106,7 @@ func Logout(c *gin.Context) {
 }
 
 func Register(c *gin.Context) {
+	ctx := c.Request.Context()
 	if !common.RegisterEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "管理员关闭了新用户注册",
@@ -152,7 +154,7 @@ func Register(c *gin.Context) {
 		}
 	}
 	affCode := user.AffCode // this code is the inviter's code, not the user's own code
-	inviterId, _ := model.GetUserIdByAffCode(affCode)
+	inviterId, _ := model.GetUserIdByAffCode(ctx, affCode)
 	cleanUser := model.User{
 		Username:    user.Username,
 		Password:    user.Password,
@@ -162,7 +164,7 @@ func Register(c *gin.Context) {
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
-	if err := cleanUser.Insert(inviterId); err != nil {
+	if err := cleanUser.Insert(ctx, inviterId); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
@@ -177,11 +179,12 @@ func Register(c *gin.Context) {
 }
 
 func GetAllUsers(c *gin.Context) {
+	ctx := c.Request.Context()
 	p, _ := strconv.Atoi(c.Query("p"))
 	if p < 0 {
 		p = 0
 	}
-	users, err := model.GetAllUsers(p*common.ItemsPerPage, common.ItemsPerPage)
+	users, err := model.GetAllUsers(ctx, p*common.ItemsPerPage, common.ItemsPerPage)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -198,8 +201,9 @@ func GetAllUsers(c *gin.Context) {
 }
 
 func SearchUsers(c *gin.Context) {
+	ctx := c.Request.Context()
 	keyword := c.Query("keyword")
-	users, err := model.SearchUsers(keyword)
+	users, err := model.SearchUsers(ctx, keyword)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -216,6 +220,7 @@ func SearchUsers(c *gin.Context) {
 }
 
 func GetUser(c *gin.Context) {
+	ctx := c.Request.Context()
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -224,7 +229,7 @@ func GetUser(c *gin.Context) {
 		})
 		return
 	}
-	user, err := model.GetUserById(id, false)
+	user, err := model.GetUserById(ctx, id, false)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -249,8 +254,9 @@ func GetUser(c *gin.Context) {
 }
 
 func GenerateAccessToken(c *gin.Context) {
+	ctx := c.Request.Context()
 	id := c.GetInt("id")
-	user, err := model.GetUserById(id, true)
+	user, err := model.GetUserById(ctx, id, true)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -260,7 +266,7 @@ func GenerateAccessToken(c *gin.Context) {
 	}
 	user.AccessToken = common.GetUUID()
 
-	if model.DB.Where("access_token = ?", user.AccessToken).First(user).RowsAffected != 0 {
+	if model.DB.WithContext(ctx).Where("access_token = ?", user.AccessToken).First(user).RowsAffected != 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "请重试，系统生成的 UUID 竟然重复了！",
@@ -268,7 +274,7 @@ func GenerateAccessToken(c *gin.Context) {
 		return
 	}
 
-	if err := user.Update(false); err != nil {
+	if err := user.Update(ctx, false); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
@@ -285,8 +291,9 @@ func GenerateAccessToken(c *gin.Context) {
 }
 
 func GetAffCode(c *gin.Context) {
+	ctx := c.Request.Context()
 	id := c.GetInt("id")
-	user, err := model.GetUserById(id, true)
+	user, err := model.GetUserById(ctx, id, true)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -296,7 +303,7 @@ func GetAffCode(c *gin.Context) {
 	}
 	if user.AffCode == "" {
 		user.AffCode = common.GetRandomString(4)
-		if err := user.Update(false); err != nil {
+		if err := user.Update(ctx, false); err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": err.Error(),
@@ -313,8 +320,9 @@ func GetAffCode(c *gin.Context) {
 }
 
 func GetSelf(c *gin.Context) {
+	ctx := c.Request.Context()
 	id := c.GetInt("id")
-	user, err := model.GetUserById(id, false)
+	user, err := model.GetUserById(ctx, id, false)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -331,6 +339,7 @@ func GetSelf(c *gin.Context) {
 }
 
 func UpdateUser(c *gin.Context) {
+	ctx := c.Request.Context()
 	var updatedUser model.User
 	err := json.NewDecoder(c.Request.Body).Decode(&updatedUser)
 	if err != nil || updatedUser.Id == 0 {
@@ -350,7 +359,7 @@ func UpdateUser(c *gin.Context) {
 		})
 		return
 	}
-	originUser, err := model.GetUserById(updatedUser.Id, false)
+	originUser, err := model.GetUserById(ctx, updatedUser.Id, false)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -377,7 +386,7 @@ func UpdateUser(c *gin.Context) {
 		updatedUser.Password = "" // rollback to what it should be
 	}
 	updatePassword := updatedUser.Password != ""
-	if err := updatedUser.Update(updatePassword); err != nil {
+	if err := updatedUser.Update(ctx, updatePassword); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
@@ -385,7 +394,7 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 	if originUser.Quota != updatedUser.Quota {
-		model.RecordLog(originUser.Id, model.LogTypeManage, fmt.Sprintf("管理员将用户额度从 %s修改为 %s", common.LogQuota(originUser.Quota), common.LogQuota(updatedUser.Quota)))
+		model.RecordLog(ctx, originUser.Id, model.LogTypeManage, fmt.Sprintf("管理员将用户额度从 %s修改为 %s", common.LogQuota(originUser.Quota), common.LogQuota(updatedUser.Quota)))
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -395,6 +404,7 @@ func UpdateUser(c *gin.Context) {
 }
 
 func UpdateSelf(c *gin.Context) {
+	ctx := c.Request.Context()
 	var user model.User
 	err := json.NewDecoder(c.Request.Body).Decode(&user)
 	if err != nil {
@@ -426,7 +436,7 @@ func UpdateSelf(c *gin.Context) {
 		cleanUser.Password = ""
 	}
 	updatePassword := user.Password != ""
-	if err := cleanUser.Update(updatePassword); err != nil {
+	if err := cleanUser.Update(ctx, updatePassword); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
@@ -442,6 +452,7 @@ func UpdateSelf(c *gin.Context) {
 }
 
 func DeleteUser(c *gin.Context) {
+	ctx := c.Request.Context()
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -450,7 +461,7 @@ func DeleteUser(c *gin.Context) {
 		})
 		return
 	}
-	originUser, err := model.GetUserById(id, false)
+	originUser, err := model.GetUserById(ctx, id, false)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -466,7 +477,7 @@ func DeleteUser(c *gin.Context) {
 		})
 		return
 	}
-	err = model.DeleteUserById(id)
+	err = model.DeleteUserById(ctx, id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
@@ -477,8 +488,9 @@ func DeleteUser(c *gin.Context) {
 }
 
 func DeleteSelf(c *gin.Context) {
+	ctx := c.Request.Context()
 	id := c.GetInt("id")
-	user, _ := model.GetUserById(id, false)
+	user, _ := model.GetUserById(ctx, id, false)
 
 	if user.Role == common.RoleRootUser {
 		c.JSON(http.StatusOK, gin.H{
@@ -488,7 +500,7 @@ func DeleteSelf(c *gin.Context) {
 		return
 	}
 
-	err := model.DeleteUserById(id)
+	err := model.DeleteUserById(ctx, id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -504,6 +516,7 @@ func DeleteSelf(c *gin.Context) {
 }
 
 func CreateUser(c *gin.Context) {
+	ctx := c.Request.Context()
 	var user model.User
 	err := json.NewDecoder(c.Request.Body).Decode(&user)
 	if err != nil || user.Username == "" || user.Password == "" {
@@ -537,7 +550,7 @@ func CreateUser(c *gin.Context) {
 		Password:    user.Password,
 		DisplayName: user.DisplayName,
 	}
-	if err := cleanUser.Insert(0); err != nil {
+	if err := cleanUser.Insert(ctx, 0); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
@@ -559,6 +572,7 @@ type ManageRequest struct {
 
 // ManageUser Only admin user can do this
 func ManageUser(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req ManageRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 
@@ -573,7 +587,7 @@ func ManageUser(c *gin.Context) {
 		Username: req.Username,
 	}
 	// Fill attributes
-	model.DB.Where(&user).First(&user)
+	model.DB.WithContext(ctx).Where(&user).First(&user)
 	if user.Id == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -609,7 +623,7 @@ func ManageUser(c *gin.Context) {
 			})
 			return
 		}
-		if err := user.Delete(); err != nil {
+		if err := user.Delete(ctx); err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": err.Error(),
@@ -650,7 +664,7 @@ func ManageUser(c *gin.Context) {
 		user.Role = common.RoleCommonUser
 	}
 
-	if err := user.Update(false); err != nil {
+	if err := user.Update(ctx, false); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
@@ -670,6 +684,7 @@ func ManageUser(c *gin.Context) {
 }
 
 func EmailBind(c *gin.Context) {
+	ctx := c.Request.Context()
 	email := c.Query("email")
 	code := c.Query("code")
 	if !common.VerifyCodeWithKey(email, code, common.EmailVerificationPurpose) {
@@ -683,7 +698,7 @@ func EmailBind(c *gin.Context) {
 	user := model.User{
 		Id: id,
 	}
-	err := user.FillUserById()
+	err := user.FillUserById(ctx)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -693,7 +708,7 @@ func EmailBind(c *gin.Context) {
 	}
 	user.Email = email
 	// no need to check if this email already taken, because we have used verification code to check it
-	err = user.Update(false)
+	err = user.Update(ctx, false)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -716,6 +731,7 @@ type topUpRequest struct {
 }
 
 func TopUp(c *gin.Context) {
+	ctx := c.Request.Context()
 	req := topUpRequest{}
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
@@ -726,7 +742,7 @@ func TopUp(c *gin.Context) {
 		return
 	}
 	id := c.GetInt("id")
-	quota, err := model.Redeem(req.Key, id)
+	quota, err := model.Redeem(ctx, req.Key, id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

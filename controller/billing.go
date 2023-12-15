@@ -7,6 +7,7 @@ import (
 )
 
 func GetSubscription(c *gin.Context) {
+	ctx := c.Request.Context()
 	var remainQuota int
 	var usedQuota int
 	var err error
@@ -14,14 +15,14 @@ func GetSubscription(c *gin.Context) {
 	var expiredTime int64
 	if common.DisplayTokenStatEnabled {
 		tokenId := c.GetInt("token_id")
-		token, err = model.GetTokenById(tokenId)
+		token, err = model.GetTokenById(ctx, tokenId)
 		expiredTime = token.ExpiredTime
 		remainQuota = token.RemainQuota
 		usedQuota = token.UsedQuota
 	} else {
 		userId := c.GetInt("id")
-		remainQuota, err = model.GetUserQuota(userId)
-		usedQuota, err = model.GetUserUsedQuota(userId)
+		remainQuota, err = model.GetUserQuota(ctx, userId)
+		usedQuota, err = model.GetUserUsedQuota(ctx, userId)
 	}
 	if expiredTime <= 0 {
 		expiredTime = 0
@@ -57,16 +58,17 @@ func GetSubscription(c *gin.Context) {
 }
 
 func GetUsage(c *gin.Context) {
+	ctx := c.Request.Context()
 	var quota int
 	var err error
 	var token *model.Token
 	if common.DisplayTokenStatEnabled {
 		tokenId := c.GetInt("token_id")
-		token, err = model.GetTokenById(tokenId)
+		token, err = model.GetTokenById(ctx, tokenId)
 		quota = token.UsedQuota
 	} else {
 		userId := c.GetInt("id")
-		quota, err = model.GetUserUsedQuota(userId)
+		quota, err = model.GetUserUsedQuota(ctx, userId)
 	}
 	if err != nil {
 		openAIError := OpenAIError{

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"one-api/common"
 	"strings"
 )
@@ -13,7 +14,7 @@ type Ability struct {
 	Priority  *int64 `json:"priority" gorm:"bigint;default:0;index"`
 }
 
-func GetRandomSatisfiedChannel(group string, model string) (*Channel, error) {
+func GetRandomSatisfiedChannel(ctx context.Context, group string, model string) (*Channel, error) {
 	ability := Ability{}
 	groupCol := "`group`"
 	trueVal := "1"
@@ -23,8 +24,8 @@ func GetRandomSatisfiedChannel(group string, model string) (*Channel, error) {
 	}
 
 	var err error = nil
-	maxPrioritySubQuery := DB.Model(&Ability{}).Select("MAX(priority)").Where(groupCol+" = ? and model = ? and enabled = "+trueVal, group, model)
-	channelQuery := DB.Where(groupCol+" = ? and model = ? and enabled = "+trueVal+" and priority = (?)", group, model, maxPrioritySubQuery)
+	maxPrioritySubQuery := DB.WithContext(ctx).Model(&Ability{}).Select("MAX(priority)").Where(groupCol+" = ? and model = ? and enabled = "+trueVal, group, model)
+	channelQuery := DB.WithContext(ctx).Where(groupCol+" = ? and model = ? and enabled = "+trueVal+" and priority = (?)", group, model, maxPrioritySubQuery)
 	if common.UsingSQLite || common.UsingPostgreSQL {
 		err = channelQuery.Order("RANDOM()").First(&ability).Error
 	} else {
@@ -35,11 +36,11 @@ func GetRandomSatisfiedChannel(group string, model string) (*Channel, error) {
 	}
 	channel := Channel{}
 	channel.Id = ability.ChannelId
-	err = DB.First(&channel, "id = ?", ability.ChannelId).Error
+	err = DB.WithContext(ctx).First(&channel, "id = ?", ability.ChannelId).Error
 	return &channel, err
 }
 
-func (channel *Channel) AddAbilities() error {
+func (channel *Channel) AddAbilities(ctx context.Context) error {
 	models_ := strings.Split(channel.Models, ",")
 	groups_ := strings.Split(channel.Group, ",")
 	abilities := make([]Ability, 0, len(models_))
@@ -55,30 +56,30 @@ func (channel *Channel) AddAbilities() error {
 			abilities = append(abilities, ability)
 		}
 	}
-	return DB.Create(&abilities).Error
+	return DB.WithContext(ctx).Create(&abilities).Error
 }
 
-func (channel *Channel) DeleteAbilities() error {
-	return DB.Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error
+func (channel *Channel) DeleteAbilities(ctx context.Context) error {
+	return DB.WithContext(ctx).Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error
 }
 
 // UpdateAbilities updates abilities of this channel.
 // Make sure the channel is completed before calling this function.
-func (channel *Channel) UpdateAbilities() error {
+func (channel *Channel) UpdateAbilities(ctx context.Context) error {
 	// A quick and dirty way to update abilities
 	// First delete all abilities of this channel
-	err := channel.DeleteAbilities()
+	err := channel.DeleteAbilities(ctx)
 	if err != nil {
 		return err
 	}
 	// Then add new abilities
-	err = channel.AddAbilities()
+	err = channel.AddAbilities(ctx)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func UpdateAbilityStatus(channelId int, status bool) error {
-	return DB.Model(&Ability{}).Where("channel_id = ?", channelId).Select("enabled").Update("enabled", status).Error
+func UpdateAbilityStatus(ctx context.Context, channelId int, status bool) error {
+	return DB.WithContext(ctx).Model(&Ability{}).Where("channel_id = ?", channelId).Select("enabled").Update("enabled", status).Error
 }

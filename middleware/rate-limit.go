@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -14,7 +13,7 @@ var timeFormat = "2006-01-02T15:04:05.000Z"
 var inMemoryRateLimiter common.InMemoryRateLimiter
 
 func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	rdb := common.RDB
 	key := "rateLimit:" + mark + c.ClientIP()
 	listLength, err := rdb.LLen(ctx, key).Result()

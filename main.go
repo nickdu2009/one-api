@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"github.com/gin-contrib/sessions"
@@ -22,6 +23,7 @@ var buildFS embed.FS
 var indexPage []byte
 
 func main() {
+	ctx := context.Background()
 	common.SetupLogger()
 	common.SysLog("One API " + common.Version + " started")
 	if os.Getenv("GIN_MODE") != "debug" {
@@ -31,7 +33,7 @@ func main() {
 		common.SysLog("running in debug mode")
 	}
 	// Initialize SQL Database
-	err := model.InitDB()
+	err := model.InitDB(ctx)
 	if err != nil {
 		common.FatalLog("failed to initialize database: " + err.Error())
 	}
@@ -43,13 +45,13 @@ func main() {
 	}()
 
 	// Initialize Redis
-	err = common.InitRedisClient()
+	err = common.InitRedisClient(ctx)
 	if err != nil {
 		common.FatalLog("failed to initialize Redis: " + err.Error())
 	}
 
 	// Initialize options
-	model.InitOptionMap()
+	model.InitOptionMap(ctx)
 	if common.RedisEnabled {
 		// for compatibility with old versions
 		common.MemoryCacheEnabled = true
@@ -57,30 +59,30 @@ func main() {
 	if common.MemoryCacheEnabled {
 		common.SysLog("memory cache enabled")
 		common.SysError(fmt.Sprintf("sync frequency: %d seconds", common.SyncFrequency))
-		model.InitChannelCache()
+		model.InitChannelCache(ctx)
 	}
 	if common.MemoryCacheEnabled {
-		go model.SyncOptions(common.SyncFrequency)
-		go model.SyncChannelCache(common.SyncFrequency)
+		go model.SyncOptions(ctx, common.SyncFrequency)
+		go model.SyncChannelCache(ctx, common.SyncFrequency)
 	}
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_UPDATE_FREQUENCY"))
 		if err != nil {
 			common.FatalLog("failed to parse CHANNEL_UPDATE_FREQUENCY: " + err.Error())
 		}
-		go controller.AutomaticallyUpdateChannels(frequency)
+		go controller.AutomaticallyUpdateChannels(ctx, frequency)
 	}
 	if os.Getenv("CHANNEL_TEST_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_TEST_FREQUENCY"))
 		if err != nil {
 			common.FatalLog("failed to parse CHANNEL_TEST_FREQUENCY: " + err.Error())
 		}
-		go controller.AutomaticallyTestChannels(frequency)
+		go controller.AutomaticallyTestChannels(ctx, frequency)
 	}
 	if os.Getenv("BATCH_UPDATE_ENABLED") == "true" {
 		common.BatchUpdateEnabled = true
 		common.SysLog("batch update enabled with interval " + strconv.Itoa(common.BatchUpdateInterval) + "s")
-		model.InitBatchUpdater()
+		model.InitBatchUpdater(ctx)
 	}
 	controller.InitTokenEncoders()
 

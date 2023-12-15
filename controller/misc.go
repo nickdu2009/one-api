@@ -72,6 +72,7 @@ func GetHomePageContent(c *gin.Context) {
 }
 
 func SendEmailVerification(c *gin.Context) {
+	ctx := c.Request.Context()
 	email := c.Query("email")
 	if err := common.Validate.Var(email, "required,email"); err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -96,7 +97,7 @@ func SendEmailVerification(c *gin.Context) {
 			return
 		}
 	}
-	if model.IsEmailAlreadyTaken(email) {
+	if model.IsEmailAlreadyTaken(ctx, email) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "邮箱地址已被占用",
@@ -125,6 +126,7 @@ func SendEmailVerification(c *gin.Context) {
 }
 
 func SendPasswordResetEmail(c *gin.Context) {
+	ctx := c.Request.Context()
 	email := c.Query("email")
 	if err := common.Validate.Var(email, "required,email"); err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -133,7 +135,7 @@ func SendPasswordResetEmail(c *gin.Context) {
 		})
 		return
 	}
-	if !model.IsEmailAlreadyTaken(email) {
+	if !model.IsEmailAlreadyTaken(ctx, email) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "该邮箱地址未注册",
@@ -169,6 +171,7 @@ type PasswordResetRequest struct {
 }
 
 func ResetPassword(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req PasswordResetRequest
 	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if req.Email == "" || req.Token == "" {
@@ -186,7 +189,7 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 	password := common.GenerateVerificationCode(12)
-	err = model.ResetUserPasswordByEmail(req.Email, password)
+	err = model.ResetUserPasswordByEmail(ctx, req.Email, password)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
