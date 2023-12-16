@@ -56,6 +56,7 @@ func SysError(s string) {
 }
 
 func LogInfo(ctx context.Context, msg string) {
+	return
 	logHelper(ctx, loggerINFO, msg)
 }
 
