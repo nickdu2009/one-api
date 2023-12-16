@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"go.opentelemetry.io/otel"
 	"gorm.io/gorm"
 	"one-api/common"
 )
@@ -157,6 +158,9 @@ func UpdateChannelStatusById(ctx context.Context, id int, status int) {
 }
 
 func UpdateChannelUsedQuota(ctx context.Context, id int, quota int) {
+	tracer := otel.Tracer("one-api/model/channel")
+	ctx, span := tracer.Start(ctx, "UpdateChannelUsedQuota")
+	defer span.End()
 	if common.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeChannelUsedQuota, id, quota)
 		return

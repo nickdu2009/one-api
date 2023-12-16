@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.opentelemetry.io/otel"
 	"gorm.io/gorm"
 	"one-api/common"
 	"strings"
@@ -314,6 +315,9 @@ func GetRootUserEmail(ctx context.Context) (email string) {
 }
 
 func UpdateUserUsedQuotaAndRequestCount(ctx context.Context, id int, quota int) {
+	tracer := otel.Tracer("one-api/model/user")
+	ctx, span := tracer.Start(ctx, "UpdateUserUsedQuotaAndRequestCount")
+	defer span.End()
 	if common.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeUsedQuota, id, quota)
 		addNewRecord(BatchUpdateTypeRequestCount, id, 1)
