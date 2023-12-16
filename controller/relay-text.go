@@ -40,12 +40,14 @@ func init() {
 		}
 	} else {
 		httpClient = &http.Client{
-			Timeout: time.Duration(common.RelayTimeout) * time.Second,
+			Timeout:   time.Duration(common.RelayTimeout) * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
 		}
 	}
 
 	impatientHTTPClient = &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:   5 * time.Second,
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
 }
 
@@ -332,7 +334,7 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 	isStream := textRequest.Stream
 
 	if apiType != APITypeXunfei { // cause xunfei use websocket
-		req, err = http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
+		req, err = http.NewRequestWithContext(ctx, c.Request.Method, fullRequestURL, requestBody)
 		if err != nil {
 			return errorWrapper(err, "new_request_failed", http.StatusInternalServerError)
 		}

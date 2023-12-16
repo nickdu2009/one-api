@@ -55,7 +55,6 @@ func newTraceProvider(exp sdktrace.SpanExporter) *sdktrace.TracerProvider {
 	)
 }
 func main() {
-
 	ctx := context.Background()
 	exp, err := newExporter(ctx)
 	if err != nil {
