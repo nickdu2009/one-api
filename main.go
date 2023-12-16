@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"log"
 	"one-api/common"
@@ -64,9 +65,15 @@ func newTraceProvider(exp sdktrace.SpanExporter) *sdktrace.TracerProvider {
 func main() {
 	ctx := context.Background()
 	traceEndPoint := os.Getenv("TRACE_ENDPOINT")
-	exp, err := newExporter(ctx, traceEndPoint)
-	if err != nil {
-		log.Fatalf("failed to initialize exporter: %v", err)
+	var exp sdktrace.SpanExporter
+	if traceEndPoint != "" {
+		var err error
+		exp, err = newExporter(ctx, traceEndPoint)
+		if err != nil {
+			log.Fatalf("failed to initialize exporter: %v", err)
+		}
+	} else {
+		exp = tracetest.NewNoopExporter()
 	}
 
 	// Create a new tracer provider with a batch span processor and the given exporter.
@@ -153,7 +160,7 @@ func main() {
 	// This will cause SSE not to work!!!
 	//server.Use(gzip.Gzip(gzip.DefaultCompression))
 	server.Use(middleware.RequestId())
-	//middleware.SetUpLogger(server)
+	middleware.SetUpLogger(server)
 	// Initialize session store
 	store := cookie.NewStore([]byte(common.SessionSecret))
 	server.Use(sessions.Sessions("session", store))
