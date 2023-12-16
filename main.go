@@ -31,8 +31,15 @@ var buildFS embed.FS
 //go:embed web/build/index.html
 var indexPage []byte
 
-func newExporter(ctx context.Context) (sdktrace.SpanExporter, error) {
-	return otlptracegrpc.New(ctx, otlptracegrpc.WithInsecure())
+func newExporter(ctx context.Context, endpoint string) (sdktrace.SpanExporter, error) {
+	fmt.Printf("trace endpoint %s\n", endpoint)
+	ops := []otlptracegrpc.Option{
+		otlptracegrpc.WithInsecure(),
+	}
+	if endpoint != "" {
+		ops = append(ops, otlptracegrpc.WithEndpoint(endpoint))
+	}
+	return otlptracegrpc.New(ctx, ops...)
 }
 
 func newTraceProvider(exp sdktrace.SpanExporter) *sdktrace.TracerProvider {
@@ -56,7 +63,8 @@ func newTraceProvider(exp sdktrace.SpanExporter) *sdktrace.TracerProvider {
 }
 func main() {
 	ctx := context.Background()
-	exp, err := newExporter(ctx)
+	traceEndPoint := os.Getenv("TRACE_ENDPOINT")
+	exp, err := newExporter(ctx, traceEndPoint)
 	if err != nil {
 		log.Fatalf("failed to initialize exporter: %v", err)
 	}
@@ -137,6 +145,7 @@ func main() {
 		runtime.SetBlockProfileRate(1)
 		runtime.SetMutexProfileFraction(1)
 		pprof.Register(server)
+		fmt.Println("pprof")
 	}
 
 	server.Use(otelgin.Middleware("one-api"))
