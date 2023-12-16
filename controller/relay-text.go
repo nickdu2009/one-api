@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"io"
 	"math"
 	"net/http"
@@ -34,7 +35,9 @@ var impatientHTTPClient *http.Client
 
 func init() {
 	if common.RelayTimeout == 0 {
-		httpClient = &http.Client{}
+		httpClient = &http.Client{
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		}
 	} else {
 		httpClient = &http.Client{
 			Timeout: time.Duration(common.RelayTimeout) * time.Second,
@@ -393,13 +396,11 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 
 		if resp.StatusCode != http.StatusOK {
 			if preConsumedQuota != 0 {
-				go func(ctx context.Context) {
-					// return pre-consumed quota
-					err := model.PostConsumeTokenQuota(ctx, tokenId, -preConsumedQuota)
-					if err != nil {
-						common.LogError(ctx, "error return pre-consumed quota: "+err.Error())
-					}
-				}(c.Request.Context())
+				// return pre-consumed quota
+				err := model.PostConsumeTokenQuota(ctx, tokenId, -preConsumedQuota)
+				if err != nil {
+					common.LogError(ctx, "error return pre-consumed quota: "+err.Error())
+				}
 			}
 			return relayErrorHandler(resp)
 		}
@@ -410,39 +411,38 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 
 	defer func(ctx context.Context) {
 		// c.Writer.Flush()
-		go func() {
-			quota := 0
-			completionRatio := common.GetCompletionRatio(textRequest.Model)
-			promptTokens = textResponse.Usage.PromptTokens
-			completionTokens = textResponse.Usage.CompletionTokens
-			quota = int(math.Ceil((float64(promptTokens) + float64(completionTokens)*completionRatio) * ratio))
-			if ratio != 0 && quota <= 0 {
-				quota = 1
-			}
-			totalTokens := promptTokens + completionTokens
-			if totalTokens == 0 {
-				// in this case, must be some error happened
-				// we cannot just return, because we may have to return the pre-consumed quota
-				quota = 0
-			}
-			quotaDelta := quota - preConsumedQuota
-			err := model.PostConsumeTokenQuota(ctx, tokenId, quotaDelta)
-			if err != nil {
-				common.LogError(ctx, "error consuming token remain quota: "+err.Error())
-			}
-			err = model.CacheUpdateUserQuota(ctx, userId)
-			if err != nil {
-				common.LogError(ctx, "error update user quota cache: "+err.Error())
-			}
-			if quota != 0 {
-				logContent := fmt.Sprintf("模型倍率 %.2f，分组倍率 %.2f", modelRatio, groupRatio)
-				model.RecordConsumeLog(ctx, userId, channelId, promptTokens, completionTokens, textRequest.Model, tokenName, quota, logContent)
-				model.UpdateUserUsedQuotaAndRequestCount(ctx, userId, quota)
-				model.UpdateChannelUsedQuota(ctx, channelId, quota)
-			}
 
-		}()
-	}(c.Request.Context())
+		quota := 0
+		completionRatio := common.GetCompletionRatio(textRequest.Model)
+		promptTokens = textResponse.Usage.PromptTokens
+		completionTokens = textResponse.Usage.CompletionTokens
+		quota = int(math.Ceil((float64(promptTokens) + float64(completionTokens)*completionRatio) * ratio))
+		if ratio != 0 && quota <= 0 {
+			quota = 1
+		}
+		totalTokens := promptTokens + completionTokens
+		if totalTokens == 0 {
+			// in this case, must be some error happened
+			// we cannot just return, because we may have to return the pre-consumed quota
+			quota = 0
+		}
+		quotaDelta := quota - preConsumedQuota
+		err := model.PostConsumeTokenQuota(ctx, tokenId, quotaDelta)
+		if err != nil {
+			common.LogError(ctx, "error consuming token remain quota: "+err.Error())
+		}
+		err = model.CacheUpdateUserQuota(ctx, userId)
+		if err != nil {
+			common.LogError(ctx, "error update user quota cache: "+err.Error())
+		}
+		if quota != 0 {
+			logContent := fmt.Sprintf("模型倍率 %.2f，分组倍率 %.2f", modelRatio, groupRatio)
+			model.RecordConsumeLog(ctx, userId, channelId, promptTokens, completionTokens, textRequest.Model, tokenName, quota, logContent)
+			model.UpdateUserUsedQuotaAndRequestCount(ctx, userId, quota)
+			model.UpdateChannelUsedQuota(ctx, channelId, quota)
+		}
+
+	}(common.Detach(c.Request.Context()))
 	switch apiType {
 	case APITypeOpenAI:
 		if isStream {

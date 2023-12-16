@@ -2,10 +2,13 @@ package model
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/plugin/opentelemetry/tracing"
 	"one-api/common"
 	"os"
 	"strings"
@@ -68,6 +71,9 @@ func chooseDB() (*gorm.DB, error) {
 func InitDB(ctx context.Context) (err error) {
 	db, err := chooseDB()
 	if err == nil {
+		if err := db.Use(tracing.NewPlugin(tracing.WithoutMetrics())); err != nil {
+			panic(err)
+		}
 		if common.DebugEnabled {
 			db = db.Debug()
 		}
@@ -76,9 +82,10 @@ func InitDB(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
+
 		sqlDB.SetMaxIdleConns(common.GetOrDefault("SQL_MAX_IDLE_CONNS", 100))
 		sqlDB.SetMaxOpenConns(common.GetOrDefault("SQL_MAX_OPEN_CONNS", 1000))
-		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetOrDefault("SQL_MAX_LIFETIME", 60)))
+		sqlDB.SetConnMaxLifetime(time.Minute * time.Duration(common.GetOrDefault("SQL_MAX_LIFETIME", 60)))
 
 		if !common.IsMasterNode {
 			return nil
@@ -114,7 +121,18 @@ func InitDB(ctx context.Context) (err error) {
 		}
 		common.SysLog("database migrated")
 		err = createRootAccountIfNeed(ctx)
-		return err
+		if err != nil {
+			return err
+		}
+		go func() {
+			for {
+				time.Sleep(time.Second)
+				data, _ := json.Marshal(sqlDB.Stats())
+				common.SysLog(fmt.Sprintf("sql db stats %s", data))
+			}
+
+		}()
+		return nil
 	} else {
 		common.FatalLog(err)
 	}

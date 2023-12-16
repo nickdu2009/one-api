@@ -90,7 +90,7 @@ func GetTokenById(ctx context.Context, id int) (*Token, error) {
 	}
 	token := Token{Id: id}
 	var err error = nil
-	err = DB.WithContext(ctx).First(&token, "id = ?", id).Error
+	err = DB.WithContext(ctx).First(&token).Error
 	return &token, err
 }
 

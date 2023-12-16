@@ -2,6 +2,9 @@ package common
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"github.com/go-redis/redis/extra/redisotel/v8"
 	"github.com/go-redis/redis/v8"
 	"os"
 	"time"
@@ -28,15 +31,23 @@ func InitRedisClient(ctx context.Context) (err error) {
 		FatalLog("failed to parse Redis connection string: " + err.Error())
 	}
 	RDB = redis.NewClient(opt)
-
+	RDB.AddHook(redisotel.NewTracingHook())
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-
+	RDB.PoolStats()
 	_, err = RDB.Ping(ctx).Result()
 	if err != nil {
 		FatalLog("Redis ping test failed: " + err.Error())
+		return err
 	}
-	return err
+	go func() {
+		for {
+			time.Sleep(time.Second)
+			data, _ := json.Marshal(RDB.PoolStats())
+			SysLog(fmt.Sprintf("redis db stats %s", data))
+		}
+	}()
+	return nil
 }
 
 func ParseRedisOption() *redis.Options {
