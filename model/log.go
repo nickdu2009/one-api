@@ -53,7 +53,10 @@ func RecordConsumeLog(ctx context.Context, userId int, channelId int, promptToke
 	ctx, span := tracer.Start(ctx, "RecordConsumeLog")
 	defer span.End()
 
+	span.AddEvent("start log file")
 	common.LogInfo(ctx, fmt.Sprintf("record consume log: userId=%d, channelId=%d, promptTokens=%d, completionTokens=%d, modelName=%s, tokenName=%s, quota=%d, content=%s", userId, channelId, promptTokens, completionTokens, modelName, tokenName, quota, content))
+	span.AddEvent("end log file")
+
 	if !common.LogConsumeEnabled {
 		return
 	}
