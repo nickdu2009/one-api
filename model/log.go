@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"go.opentelemetry.io/otel"
 	"gorm.io/gorm"
 	"one-api/common"
 )
@@ -48,6 +49,10 @@ func RecordLog(ctx context.Context, userId int, logType int, content string) {
 }
 
 func RecordConsumeLog(ctx context.Context, userId int, channelId int, promptTokens int, completionTokens int, modelName string, tokenName string, quota int, content string) {
+	tracer := otel.Tracer("one-api/model/log")
+	ctx, span := tracer.Start(ctx, "RecordConsumeLog")
+	defer span.End()
+
 	common.LogInfo(ctx, fmt.Sprintf("record consume log: userId=%d, channelId=%d, promptTokens=%d, completionTokens=%d, modelName=%s, tokenName=%s, quota=%d, content=%s", userId, channelId, promptTokens, completionTokens, modelName, tokenName, quota, content))
 	if !common.LogConsumeEnabled {
 		return
