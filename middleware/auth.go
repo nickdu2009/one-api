@@ -3,6 +3,7 @@ package middleware
 import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel"
 	"net/http"
 	"one-api/common"
 	"one-api/model"
@@ -87,7 +88,9 @@ func RootAuth() func(c *gin.Context) {
 func TokenAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-
+		tracer := otel.Tracer("one-api/middleware/auth")
+		ctx, span := tracer.Start(ctx, "TokenAuth")
+		defer span.End()
 		key := c.Request.Header.Get("Authorization")
 		key = strings.TrimPrefix(key, "Bearer ")
 		key = strings.TrimPrefix(key, "sk-")

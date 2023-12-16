@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"go.opentelemetry.io/otel"
 	"net/http"
 	"one-api/common"
 	"one-api/model"
@@ -18,6 +19,9 @@ type ModelRequest struct {
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
+		tracer := otel.Tracer("one-api/middleware/distributor")
+		ctx, span := tracer.Start(ctx, "Distribute")
+		defer span.End()
 		userId := c.GetInt("id")
 		userGroup, _ := model.CacheGetUserGroup(ctx, userId)
 		c.Set("group", userGroup)
