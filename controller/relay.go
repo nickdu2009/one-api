@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"go.opentelemetry.io/otel"
 	"net/http"
 	"one-api/common"
 	"strconv"
@@ -256,6 +257,10 @@ type CompletionsStreamResponse struct {
 
 func Relay(c *gin.Context) {
 	ctx := c.Request.Context()
+	tracer := otel.Tracer("one-api/controller/relay")
+	ctx, span := tracer.Start(ctx, "Relay")
+	defer span.End()
+
 	relayMode := RelayModeUnknown
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/chat/completions") {
 		relayMode = RelayModeChatCompletions
@@ -291,6 +296,7 @@ func Relay(c *gin.Context) {
 	default:
 		err = relayTextHelper(c, relayMode)
 	}
+
 	if err != nil {
 		requestId := c.GetString(common.RequestIdKey)
 		retryTimesStr := c.Query("retry")

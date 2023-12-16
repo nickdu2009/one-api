@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	"io"
 	"math"
 	"net/http"
@@ -53,6 +54,10 @@ func init() {
 
 func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 	ctx := c.Request.Context()
+	tracer := otel.Tracer("one-api/controller/relay-text")
+	ctx, span := tracer.Start(ctx, "relayTextHelper")
+	defer span.End()
+
 	channelType := c.GetInt("channel")
 	channelId := c.GetInt("channel_id")
 	tokenId := c.GetInt("token_id")
