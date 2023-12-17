@@ -66,8 +66,8 @@ func main() {
 	ctx := context.Background()
 	traceEndPoint := os.Getenv("TRACE_ENDPOINT")
 	var exp sdktrace.SpanExporter
+	var err error
 	if traceEndPoint != "" {
-		var err error
 		exp, err = newExporter(ctx, traceEndPoint)
 		if err != nil {
 			log.Fatalf("failed to initialize exporter: %v", err)
