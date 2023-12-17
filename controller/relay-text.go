@@ -45,11 +45,12 @@ func defaultTransportDialContext(dialer *net.Dialer) func(context.Context, strin
 func init() {
 	maxIdleConnsPerHost := runtime.NumCPU() * 100
 
-	if os.Getenv("MaxIdleConnsPerHost") != "" {
-		maxIdleConnsPerHostFromEnv, err := strconv.Atoi(os.Getenv("MaxIdleConnsPerHost"))
+	if os.Getenv("MaxIdleConnsPerHostPerCpu") != "" {
+		maxIdleConnsPerHostPercpuFromEnv, err := strconv.Atoi(os.Getenv("MaxIdleConnsPerHostPerCpu"))
 		if err != nil {
-			if maxIdleConnsPerHostFromEnv > 0 {
-				maxIdleConnsPerHost = maxIdleConnsPerHostFromEnv
+			if maxIdleConnsPerHostPercpuFromEnv > 0 {
+				fmt.Printf("maxIdleConnsPerHostPercpuFromEnv = %d\n", maxIdleConnsPerHostPercpuFromEnv)
+				maxIdleConnsPerHost = runtime.NumCPU() * maxIdleConnsPerHostPercpuFromEnv
 			}
 		}
 	}
