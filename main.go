@@ -13,8 +13,9 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"log"
 	"one-api/common"
 	"one-api/controller"
@@ -65,25 +66,24 @@ func newTraceProvider(exp sdktrace.SpanExporter) *sdktrace.TracerProvider {
 func main() {
 	ctx := context.Background()
 	traceEndPoint := os.Getenv("TRACE_ENDPOINT")
-	var exp sdktrace.SpanExporter
+
+	var tp trace.TracerProvider
 	var err error
+
 	if traceEndPoint != "" {
-		exp, err = newExporter(ctx, traceEndPoint)
+		exp, err := newExporter(ctx, traceEndPoint)
 		if err != nil {
 			log.Fatalf("failed to initialize exporter: %v", err)
 		}
+		sdkTp := newTraceProvider(exp)
+		// Handle shutdown properly so nothing leaks.
+		defer func() { _ = sdkTp.Shutdown(ctx) }()
+		tp = sdkTp
 	} else {
-		exp = tracetest.NewNoopExporter()
+		tp = noop.NewTracerProvider()
 	}
 
-	// Create a new tracer provider with a batch span processor and the given exporter.
-	tp := newTraceProvider(exp)
-
-	// Handle shutdown properly so nothing leaks.
-	defer func() { _ = tp.Shutdown(ctx) }()
-
 	otel.SetTracerProvider(tp)
-
 	common.SetupLogger()
 	common.SysLog("One API " + common.Version + " started")
 	if os.Getenv("GIN_MODE") != "debug" {
