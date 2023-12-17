@@ -98,6 +98,9 @@ var BatchUpdateInterval = GetOrDefault("BATCH_UPDATE_INTERVAL", 5)
 
 var RelayTimeout = GetOrDefault("RELAY_TIMEOUT", 0) // unit is second
 
+var AsyncWriteConsumeLogEnable = os.Getenv("ASYNC_WRITE_CONSUME_LOG_ENABLE") == "true"
+var AsyncWriteConsumeLogFrequency = GetOrDefault("ASYNC_WRITE_CONSUME_LOG_FREQUENCY", 1)
+
 const (
 	RequestIdKey = "X-Oneapi-Request-Id"
 )

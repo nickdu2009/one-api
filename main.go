@@ -144,6 +144,10 @@ func main() {
 	}
 	controller.InitTokenEncoders()
 
+	if common.AsyncWriteConsumeLogEnable {
+		common.SysLog("AsyncWriteConsumeLogEnable with interval " + strconv.Itoa(common.AsyncWriteConsumeLogFrequency) + "s")
+		model.InitAsyncWriteConsumeLogWriter(ctx)
+	}
 	// Initialize HTTP server
 	server := gin.New()
 	if os.Getenv("PPROF") == "true" {

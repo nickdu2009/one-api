@@ -6,7 +6,55 @@ import (
 	"go.opentelemetry.io/otel"
 	"gorm.io/gorm"
 	"one-api/common"
+	"sync"
+	"time"
 )
+
+var asyncWriteConsumeLogMutex *sync.Mutex
+var currentConsumeLogQueue []*Log
+var nextConsumerLogQueue []*Log
+
+func init() {
+	asyncWriteConsumeLogMutex = &sync.Mutex{}
+	currentConsumeLogQueue = make([]*Log, 0, 1024)
+	nextConsumerLogQueue = make([]*Log, 0, 1024)
+}
+
+func InitAsyncWriteConsumeLogWriter(ctx context.Context) {
+	go func() {
+		for {
+			time.Sleep(time.Duration(common.AsyncWriteConsumeLogFrequency) * time.Second)
+			asyncWriteConsumeLogWorker(ctx)
+		}
+	}()
+}
+
+func asyncWriteConsumeLogWorker(ctx context.Context) {
+	common.SysLog("asyncWriteConsumeLogWorker started")
+	asyncWriteConsumeLogMutex.Lock()
+	var data []*Log
+	if len(currentConsumeLogQueue) > 0 {
+		data = currentConsumeLogQueue
+		currentConsumeLogQueue = nextConsumerLogQueue
+		nextConsumerLogQueue = data[0:0]
+	}
+	asyncWriteConsumeLogMutex.Unlock()
+	common.SysLog(fmt.Sprintf("asyncWriteConsumeLogWorker data len %d", len(data)))
+	batchCreateSize := 1024
+	for i := 0; i < len(data); i = i + batchCreateSize {
+		var updateData []*Log
+		if i+batchCreateSize < len(data) {
+			updateData = data[i : i+batchCreateSize]
+		} else {
+			updateData = data[i:len(data)]
+		}
+		err := DB.WithContext(ctx).Create(updateData).Error
+		if err != nil {
+			common.SysError(fmt.Sprintf("asyncWriteConsumeLogWorker %+v", err))
+		}
+	}
+	common.SysLog("asyncWriteConsumeLogWorker ended")
+}
 
 type Log struct {
 	Id               int    `json:"id;index:idx_created_at_id,priority:1"`
@@ -73,10 +121,18 @@ func RecordConsumeLog(ctx context.Context, userId int, channelId int, promptToke
 		Quota:            quota,
 		ChannelId:        channelId,
 	}
-	err := DB.WithContext(ctx).Create(log).Error
-	if err != nil {
-		common.LogError(ctx, "failed to record log: "+err.Error())
+
+	if common.AsyncWriteConsumeLogEnable {
+		asyncWriteConsumeLogMutex.Lock()
+		currentConsumeLogQueue = append(currentConsumeLogQueue, log)
+		asyncWriteConsumeLogMutex.Unlock()
+	} else {
+		err := DB.WithContext(ctx).Create(log).Error
+		if err != nil {
+			common.LogError(ctx, "failed to record log: "+err.Error())
+		}
 	}
+
 }
 
 func GetAllLogs(ctx context.Context, logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int) (logs []*Log, err error) {
