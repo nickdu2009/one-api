@@ -1,6 +1,9 @@
 package router
 
 import (
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
+	"one-api/common"
 	"one-api/controller"
 	"one-api/middleware"
 
@@ -9,7 +12,9 @@ import (
 )
 
 func SetApiRouter(router *gin.Engine) {
-	apiRouter := router.Group("/api")
+	// Initialize session store
+	store := cookie.NewStore([]byte(common.SessionSecret))
+	apiRouter := router.Group("/api", gin.Recovery(), sessions.Sessions("session", store))
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
 	apiRouter.Use(middleware.GlobalAPIRateLimit())
 	{
