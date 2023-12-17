@@ -47,13 +47,14 @@ func init() {
 
 	if os.Getenv("MaxIdleConnsPerHostPerCpu") != "" {
 		maxIdleConnsPerHostPercpuFromEnv, err := strconv.Atoi(os.Getenv("MaxIdleConnsPerHostPerCpu"))
-		if err != nil {
+		if err == nil {
 			if maxIdleConnsPerHostPercpuFromEnv > 0 {
 				fmt.Printf("maxIdleConnsPerHostPercpuFromEnv = %d\n", maxIdleConnsPerHostPercpuFromEnv)
 				maxIdleConnsPerHost = runtime.NumCPU() * maxIdleConnsPerHostPercpuFromEnv
 			}
 		}
 	}
+
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: defaultTransportDialContext(&net.Dialer{
