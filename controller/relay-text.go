@@ -10,9 +10,13 @@ import (
 	"go.opentelemetry.io/otel"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"one-api/common"
 	"one-api/model"
+	"os"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,15 +38,42 @@ const (
 var httpClient *http.Client
 var impatientHTTPClient *http.Client
 
+func defaultTransportDialContext(dialer *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
+	return dialer.DialContext
+}
+
 func init() {
+	maxIdleConnsPerHost := runtime.NumCPU() * 100
+
+	if os.Getenv("MaxIdleConnsPerHost") != "" {
+		maxIdleConnsPerHostFromEnv, err := strconv.Atoi(os.Getenv("MaxIdleConnsPerHost"))
+		if err != nil {
+			if maxIdleConnsPerHostFromEnv > 0 {
+				maxIdleConnsPerHost = maxIdleConnsPerHostFromEnv
+			}
+		}
+	}
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: defaultTransportDialContext(&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}),
+		ForceAttemptHTTP2:     true,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		MaxIdleConnsPerHost:   maxIdleConnsPerHost,
+	}
+
 	if common.RelayTimeout == 0 {
 		httpClient = &http.Client{
-			Transport: otelhttp.NewTransport(http.DefaultTransport),
+			Transport: otelhttp.NewTransport(transport),
 		}
 	} else {
 		httpClient = &http.Client{
 			Timeout:   time.Duration(common.RelayTimeout) * time.Second,
-			Transport: otelhttp.NewTransport(http.DefaultTransport),
+			Transport: otelhttp.NewTransport(transport),
 		}
 	}
 
